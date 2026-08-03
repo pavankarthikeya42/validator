@@ -210,12 +210,20 @@ class Comparator:
                 field_name = ui_path.split(">")[-1].strip() if ">" in ui_path else ui_path.strip()
                 pdf_val = pdf_data.get(ui_path)
 
-                if not pdf_val and raw_pdf_text and field_name:
-                    # Search raw PDF text for field_name
-                    pattern = re.escape(field_name) + r"[\s:\-]*([^\n\r,;]{1,60})"
+                if not pdf_val and raw_pdf_text and field_name and len(field_name) > 3 and field_name != "Content":
+                    # 1. Search raw PDF text for field_name label
+                    pattern = re.escape(field_name) + r"[\s:\-]*([^\n\r]{1,150})"
                     match = re.search(pattern, raw_pdf_text, re.IGNORECASE)
                     if match:
                         pdf_val = match.group(1).strip()
+                
+                ui_present = ui_val is not None and ui_val.strip() != ""
+                
+                if not pdf_val and ui_present:
+                    # 2. If it's a content section (or value wasn't found by label), just check if the UI value exists anywhere in the PDF!
+                    norm_ui = _normalise(ui_val)
+                    if len(norm_ui) > 5 and norm_ui in _normalise(raw_pdf_text):
+                        pdf_val = ui_val # The text exists perfectly in the PDF, treat as match!
 
                 ui_present = ui_val is not None and ui_val.strip() != ""
                 pdf_present = pdf_val is not None and pdf_val.strip() != ""

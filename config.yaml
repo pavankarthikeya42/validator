@@ -190,16 +190,7 @@ pdf:
 # pdf_regex: Python re pattern with ONE capturing group for the value.
 # normalise: if true, strip extra whitespace and compare case-insensitively
 # ------------------------------------------------------------------
-field_mappings:
-  - ui_path: "Section 1 > Document Number"   # ← CHANGE
-    pdf_regex: "Document\\s*(?:No\\.?|Number)[:\\s]+([\\w\\-]+)"
-    normalise: true
-
-  - ui_path: "Section 1 > Date"
-    pdf_regex: "Date[:\\s]+(\\d{1,2}[/\\-]\\d{1,2}[/\\-]\\d{2,4})"
-    normalise: true
-
-  # Add more mappings here …
+field_mappings: []
 
 # ------------------------------------------------------------------
 # Table Mappings
