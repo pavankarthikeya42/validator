@@ -32,33 +32,61 @@ class FieldResult:
 
 
 @dataclass
+class TableRowResult:
+    row_index: int
+    status: FieldStatus
+    ui_row: list[str]
+    pdf_row: list[str]
+
+
+@dataclass
+class TableResult:
+    table_name: str
+    status: FieldStatus
+    row_results: list[TableRowResult] = field(default_factory=list)
+
+
+@dataclass
 class ComparisonResult:
     doc_id: str
     doc_index: int
     fields: list[FieldResult] = field(default_factory=list)
     error: Optional[str] = None
     screenshot_path: Optional[str] = None
+    tables: list[TableResult] = field(default_factory=list)
 
     # Computed properties
     @property
     def total_fields(self) -> int:
-        return len([f for f in self.fields if f.status != FieldStatus.SKIPPED])
+        field_count = len([f for f in self.fields if f.status != FieldStatus.SKIPPED])
+        table_count = sum(len(t.row_results) for t in self.tables)
+        return field_count + table_count
 
     @property
     def matches(self) -> int:
-        return sum(1 for f in self.fields if f.status == FieldStatus.MATCH)
+        f_match = sum(1 for f in self.fields if f.status == FieldStatus.MATCH)
+        t_match = sum(sum(1 for r in t.row_results if r.status == FieldStatus.MATCH) for t in self.tables)
+        return f_match + t_match
 
     @property
     def mismatches(self) -> int:
-        return sum(1 for f in self.fields if f.status == FieldStatus.MISMATCH)
+        f_mis = sum(1 for f in self.fields if f.status == FieldStatus.MISMATCH)
+        t_mis = sum(sum(1 for r in t.row_results if r.status == FieldStatus.MISMATCH) for t in self.tables)
+        return f_mis + t_mis
 
     @property
     def missing_in_pdf(self) -> int:
-        return sum(1 for f in self.fields if f.status == FieldStatus.MISSING_IN_PDF)
+        f_miss = sum(1 for f in self.fields if f.status == FieldStatus.MISSING_IN_PDF)
+        t_miss = sum(sum(1 for r in t.row_results if r.status == FieldStatus.MISSING_IN_PDF) for t in self.tables)
+        # Also add tables entirely missing
+        t_miss += sum(1 for t in self.tables if t.status == FieldStatus.MISSING_IN_PDF)
+        return f_miss + t_miss
 
     @property
     def missing_in_ui(self) -> int:
-        return sum(1 for f in self.fields if f.status == FieldStatus.MISSING_IN_UI)
+        f_miss = sum(1 for f in self.fields if f.status == FieldStatus.MISSING_IN_UI)
+        t_miss = sum(sum(1 for r in t.row_results if r.status == FieldStatus.MISSING_IN_UI) for t in self.tables)
+        return f_miss + t_miss
 
     @property
     def has_mismatches(self) -> bool:
@@ -85,6 +113,22 @@ class ComparisonResult:
                 }
                 for f in self.fields
             ],
+            "tables": [
+                {
+                    "table_name": t.table_name,
+                    "status": t.status.value,
+                    "row_results": [
+                        {
+                            "row_index": r.row_index,
+                            "status": r.status.value,
+                            "ui_row": r.ui_row,
+                            "pdf_row": r.pdf_row,
+                        }
+                        for r in t.row_results
+                    ]
+                }
+                for t in self.tables
+            ]
         }
 
 
@@ -119,8 +163,13 @@ class Comparator:
         doc_index: int,
         ui_data: dict[str, str],
         pdf_data: dict[str, str],
+        ui_tables: list[dict] = None,
+        pdf_tables: list[list[list[str]]] = None,
     ) -> ComparisonResult:
         result = ComparisonResult(doc_id=doc_id, doc_index=doc_index)
+        
+        ui_tables = ui_tables or []
+        pdf_tables = pdf_tables or []
 
         # 1. Use configured mappings if valid
         valid_mappings = [
@@ -197,6 +246,57 @@ class Comparator:
                         status=FieldStatus.SKIPPED,
                     )
                 )
+
+        # 3. Table Comparison
+        for ui_table in ui_tables:
+            table_name = ui_table["name"]
+            pdf_idx = ui_table["pdf_table_index"]
+            normalise = ui_table["normalise"]
+            ui_rows = ui_table["ui_data"]
+            
+            table_res = TableResult(table_name=table_name, status=FieldStatus.MATCH)
+            
+            if pdf_idx >= len(pdf_tables):
+                table_res.status = FieldStatus.MISSING_IN_PDF
+                result.tables.append(table_res)
+                continue
+                
+            pdf_rows = pdf_tables[pdf_idx]
+            
+            # Compare rows up to the max length
+            max_rows = max(len(ui_rows), len(pdf_rows))
+            for i in range(max_rows):
+                u_row = ui_rows[i] if i < len(ui_rows) else []
+                p_row = pdf_rows[i] if i < len(pdf_rows) else []
+                
+                if not u_row and p_row:
+                    row_status = FieldStatus.MISSING_IN_UI
+                elif u_row and not p_row:
+                    row_status = FieldStatus.MISSING_IN_PDF
+                else:
+                    row_status = FieldStatus.MATCH
+                    # Simple cell-by-cell comparison
+                    max_cells = max(len(u_row), len(p_row))
+                    for j in range(max_cells):
+                        u_cell = u_row[j] if j < len(u_row) else ""
+                        p_cell = p_row[j] if j < len(p_row) else ""
+                        
+                        if normalise:
+                            if _normalise(u_cell) != _normalise(p_cell):
+                                row_status = FieldStatus.MISMATCH
+                                break
+                        else:
+                            if u_cell.strip() != p_cell.strip():
+                                row_status = FieldStatus.MISMATCH
+                                break
+                                
+                table_res.row_results.append(TableRowResult(
+                    row_index=i, status=row_status, ui_row=u_row, pdf_row=p_row
+                ))
+                if row_status != FieldStatus.MATCH:
+                    table_res.status = FieldStatus.MISMATCH
+                    
+            result.tables.append(table_res)
 
         return result
 

@@ -151,9 +151,11 @@ async def validate_document(
 
     # 3. Extract UI data
     ui_data = await ui_extractor.extract_all_sections()
+    ui_tables = await ui_extractor.extract_tables()
 
     # 4. Extract PDF data
     pdf_data = await pdf_extractor.extract()
+    pdf_tables = await pdf_extractor.extract_tables()
 
     # 5. Compare fields
     result = comparator.compare(
@@ -161,6 +163,8 @@ async def validate_document(
         doc_index=doc["index"],
         ui_data=ui_data,
         pdf_data=pdf_data,
+        ui_tables=ui_tables,
+        pdf_tables=pdf_tables,
     )
 
     # 6. Capture screenshots for mismatched fields

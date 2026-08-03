@@ -202,6 +202,19 @@ field_mappings:
   # Add more mappings here …
 
 # ------------------------------------------------------------------
+# Table Mappings
+# Maps UI tables to PDF tables for row-by-row validation.
+# ui_selector: CSS selector for the <table> or container grid in the UI.
+# pdf_table_index: 0-based index of the table in the PDF (0 = first table).
+# normalise: if true, strip extra whitespace and compare case-insensitively
+# ------------------------------------------------------------------
+table_mappings:
+  # - name: "Chatbot Table"
+  #   ui_selector: ".cmp-table"
+  #   pdf_table_index: 0
+  #   normalise: true
+
+# ------------------------------------------------------------------
 # Output
 # ------------------------------------------------------------------
 output:

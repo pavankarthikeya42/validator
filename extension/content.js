@@ -705,37 +705,51 @@
     const sections = {};
     const clean = (t) => t ? t.replace(/\s+/g, ' ').trim() : '';
 
-    // 1. Karithera <app-comparison> Web Component (Image 2)
-    const appComp = document.querySelector("app-comparison");
-    if (appComp) {
-      const rows = appComp.querySelectorAll("tr, div[class*='row'], div[class*='grid'] > div");
+    function extractPairsFromNode(rootNode) {
+      // Find row-like containers
+      const rows = rootNode.querySelectorAll("tr, [class*='row'], [class*='grid'], [class*='item'], [class*='flex']");
       rows.forEach(row => {
-        const cells = row.querySelectorAll("td, th, div[class*='col'], div[class*='label'], span");
-        if (cells.length >= 2) {
-          const k = clean(cells[0].innerText);
-          const v = clean(cells[1].innerText);
-          if (k && v && k.length <= 80 && k.toLowerCase() !== v.toLowerCase()) {
-            sections[`Clinical Review > ${k}`] = v;
+        // Must not contain other row-like containers to ensure we are at the leaf row level
+        if (row.querySelector("tr, [class*='row'], [class*='grid'], [class*='item'], [class*='flex']")) return;
+
+        const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT, null, false);
+        const texts = [];
+        let node;
+        while(node = walker.nextNode()) {
+          const t = node.nodeValue.trim();
+          if(t) texts.push(t);
+        }
+        if(texts.length >= 2) {
+          const k = clean(texts[0]).replace(/:\s*$/, '');
+          const v = clean(texts.slice(1).join(" ")); // Join rest as value
+          if(k && v && k.length <= 150 && k.toLowerCase() !== v.toLowerCase()) {
+            sections[`UI Field > ${k}`] = v;
           }
         }
       });
     }
 
-    // 2. Visible tables
-    if (Object.keys(sections).length === 0) {
-      document.querySelectorAll("table").forEach((tbl, tIdx) => {
-        tbl.querySelectorAll("tr").forEach(row => {
-          const cells = row.querySelectorAll("td, th");
-          if (cells.length >= 2) {
-            const k = clean(cells[0].innerText);
-            const v = clean(cells[1].innerText);
-            if (k && v && k.length <= 80) {
-              sections[`Clinical Review > ${k}`] = v;
-            }
-          }
-        });
-      });
+    const appComp = document.querySelector("app-comparison");
+    if (appComp) {
+      extractPairsFromNode(appComp.shadowRoot || appComp);
+    } else {
+      // Fallback to body
+      extractPairsFromNode(document.body);
     }
+
+    // Also grab standard tables as fallback
+    document.querySelectorAll("table").forEach(tbl => {
+      tbl.querySelectorAll("tr").forEach(row => {
+        const cells = row.querySelectorAll("td, th");
+        if (cells.length >= 2) {
+          const k = clean(cells[0].innerText);
+          const v = clean(cells[1].innerText);
+          if (k && v && k.length <= 150) {
+            sections[`Table > ${k}`] = v;
+          }
+        }
+      });
+    });
 
     return sections;
   }

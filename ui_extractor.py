@@ -54,11 +54,104 @@ class UIExtractor:
 
         return flat
 
+    async def extract_tables(self) -> list[dict]:
+        """
+        Extract tables from the UI based on configured table_mappings.
+        Returns a list of dicts with mapping info and extracted ui_data.
+        """
+        table_mappings = self.cfg.get("table_mappings", [])
+        if not table_mappings:
+            return []
+            
+        results = []
+        for mapping in table_mappings:
+            ui_sel = mapping.get("ui_selector")
+            if not ui_sel:
+                continue
+                
+            ui_data = []
+            try:
+                table_loc = self.page.locator(ui_sel).first
+                if await table_loc.is_visible():
+                    rows = table_loc.locator("tr")
+                    row_count = await rows.count()
+                    for r_idx in range(row_count):
+                        cells = rows.nth(r_idx).locator("td, th")
+                        cell_count = await cells.count()
+                        row_data = []
+                        for c_idx in range(cell_count):
+                            text = await cells.nth(c_idx).inner_text()
+                            row_data.append(_clean(text))
+                        if any(row_data):
+                            ui_data.append(row_data)
+            except Exception as exc:
+                print(f"Failed to extract UI table for {mapping.get('name')}: {exc}")
+                
+            results.append({
+                "name": mapping.get("name", "Unknown Table"),
+                "pdf_table_index": mapping.get("pdf_table_index", 0),
+                "normalise": mapping.get("normalise", True),
+                "ui_data": ui_data
+            })
+            
+        return results
+
     async def _smart_auto_extract(self) -> dict[str, str]:
         """Auto-detect all visible sections and key-value pairs on the page."""
         result: dict[str, str] = {}
         
-        # 0. Karithera <app-comparison> Custom Web Component Tag (Image 2)
+        # 0. Karithera <table class="cmp-table"> (Accordion sections)
+        try:
+            cmp_tables = self.page.locator("table.cmp-table")
+            if await cmp_tables.count() > 0 and await cmp_tables.first.is_visible():
+                tbodies = cmp_tables.first.locator("tbody")
+                tbody_count = await tbodies.count()
+                for i in range(tbody_count):
+                    tbody = tbodies.nth(i)
+                    class_attr = await tbody.get_attribute("class") or ""
+                    
+                    if "cmp-section-group" in class_attr:
+                        # It's an accordion section
+                        sec_row = tbody.locator(".cmp-sec-row").first
+                        if await sec_row.count() > 0:
+                            sec_name_el = sec_row.locator(".cmp-sec-text").first
+                            if await sec_name_el.count() > 0:
+                                sec_name = _clean(await sec_name_el.inner_text())
+                                
+                                # Expand if closed
+                                row_class = await sec_row.get_attribute("class") or ""
+                                if "cmp-sec-open" not in row_class:
+                                    try:
+                                        await sec_row.click()
+                                        await self.page.wait_for_timeout(300)
+                                    except Exception:
+                                        pass
+                                
+                                # Read content
+                                content_el = tbody.locator(".cmp-content-inner, .cmp-content-cell").first
+                                if await content_el.count() > 0 and await content_el.is_visible():
+                                    content = _clean(await content_el.inner_text())
+                                    if sec_name and content:
+                                        result[f"{sec_name} > Content"] = content
+                    else:
+                        # Basic top-level rows
+                        rows = tbody.locator("tr")
+                        row_count = await rows.count()
+                        for r_i in range(row_count):
+                            row = rows.nth(r_i)
+                            label_el = row.locator(".cmp-td-label").first
+                            val_el = row.locator(".cmp-td-value").first
+                            if await label_el.count() > 0 and await val_el.count() > 0:
+                                k = _clean(await label_el.inner_text())
+                                v = _clean(await val_el.inner_text())
+                                if k and v:
+                                    result[f"Overview > {k}"] = v
+                if result:
+                    return result
+        except Exception:
+            pass
+
+        # 0.5 Karithera <app-comparison> Custom Web Component Tag (Image 2)
         try:
             app_comp = self.page.locator("app-comparison")
             if await app_comp.count() > 0 and await app_comp.first.is_visible():

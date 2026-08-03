@@ -54,6 +54,7 @@ class Reporter:
         self.csv_file = self.out_dir / out_cfg.get("csv_report", "results.csv")
         self.html_file = self.out_dir / out_cfg.get("html_report", "report.html")
         self.xlsx_file = self.out_dir / out_cfg.get("excel_report", "results.xlsx")
+        self.xml_file = self.out_dir / out_cfg.get("xml_report", "results.xml")
 
         self.out_dir.mkdir(parents=True, exist_ok=True)
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
@@ -68,6 +69,7 @@ class Reporter:
         self._save_csv()
         self._save_excel()
         self._save_html()
+        self._save_xml()
 
     # ------------------------------------------------------------------
     # Summary helpers
@@ -108,6 +110,47 @@ class Reporter:
             json.dump(payload, fh, indent=2, default=str)
 
     # ------------------------------------------------------------------
+    # XML
+    # ------------------------------------------------------------------
+    def _save_xml(self) -> None:
+        import xml.etree.ElementTree as ET
+        from xml.dom import minidom
+        
+        root = ET.Element("ValidationReport")
+        
+        # Summary
+        summary = self.build_summary()
+        sum_el = ET.SubElement(root, "Summary")
+        for k, v in summary.items():
+            el = ET.SubElement(sum_el, k)
+            el.text = str(v)
+            
+        # Documents
+        docs_el = ET.SubElement(root, "Documents")
+        for result in self._results:
+            doc_el = ET.SubElement(docs_el, "Document", id=str(result.doc_id), index=str(result.doc_index))
+            if result.error:
+                ET.SubElement(doc_el, "Error").text = str(result.error)
+            else:
+                fields_el = ET.SubElement(doc_el, "Fields")
+                for fr in result.fields:
+                    f_el = ET.SubElement(fields_el, "Field", name=str(fr.field_path), status=str(fr.status.value))
+                    ET.SubElement(f_el, "UIValue").text = str(fr.ui_value or "")
+                    ET.SubElement(f_el, "PDFValue").text = str(fr.pdf_value or "")
+                
+                tables_el = ET.SubElement(doc_el, "Tables")
+                for t in result.tables:
+                    t_el = ET.SubElement(tables_el, "Table", name=str(t.table_name), status=str(t.status.value))
+                    for r in t.row_results:
+                        r_el = ET.SubElement(t_el, "Row", index=str(r.row_index), status=str(r.status.value))
+                        ET.SubElement(r_el, "UIValue").text = " | ".join(r.ui_row)
+                        ET.SubElement(r_el, "PDFValue").text = " | ".join(r.pdf_row)
+        
+        xmlstr = minidom.parseString(ET.tostring(root)).toprettyxml(indent="  ")
+        with open(self.xml_file, "w", encoding="utf-8") as fh:
+            fh.write(xmlstr)
+
+    # ------------------------------------------------------------------
     # CSV
     # ------------------------------------------------------------------
     def _save_csv(self) -> None:
@@ -129,6 +172,17 @@ class Reporter:
                         "status": fr.status.value,
                         "screenshot": fr.screenshot_path or "",
                     })
+                for t in result.tables:
+                    for r in t.row_results:
+                        writer.writerow({
+                            "doc_index": result.doc_index,
+                            "doc_id": result.doc_id,
+                            "field": f"Table [{t.table_name}] Row {r.row_index}",
+                            "ui_value": " | ".join(r.ui_row),
+                            "pdf_value": " | ".join(r.pdf_row),
+                            "status": r.status.value,
+                            "screenshot": "",
+                        })
 
     # ------------------------------------------------------------------
     # Excel
@@ -172,6 +226,21 @@ class Reporter:
                 color = EXCEL_FILLS.get(fr.status, "FFFFFF")
                 for cell in ws_det[ws_det.max_row]:
                     cell.fill = PatternFill("solid", fgColor=color)
+            
+            for t in result.tables:
+                for r in t.row_results:
+                    row = [
+                        result.doc_index,
+                        result.doc_id,
+                        f"Table [{t.table_name}] Row {r.row_index}",
+                        " | ".join(r.ui_row),
+                        " | ".join(r.pdf_row),
+                        r.status.value,
+                    ]
+                    ws_det.append(row)
+                    color = EXCEL_FILLS.get(r.status, "FFFFFF")
+                    for cell in ws_det[ws_det.max_row]:
+                        cell.fill = PatternFill("solid", fgColor=color)
 
         for col in ["A", "B", "C", "D", "E", "F"]:
             ws_det.column_dimensions[col].width = 30
@@ -195,6 +264,21 @@ class Reporter:
                     color = EXCEL_FILLS.get(fr.status, "FFFFFF")
                     for cell in ws_mis[ws_mis.max_row]:
                         cell.fill = PatternFill("solid", fgColor=color)
+            
+            for t in result.tables:
+                for r in t.row_results:
+                    if r.status in (
+                        FieldStatus.MISMATCH,
+                        FieldStatus.MISSING_IN_PDF,
+                        FieldStatus.MISSING_IN_UI,
+                    ):
+                        ws_mis.append([
+                            result.doc_index, result.doc_id, f"Table [{t.table_name}] Row {r.row_index}",
+                            " | ".join(r.ui_row), " | ".join(r.pdf_row), r.status.value,
+                        ])
+                        color = EXCEL_FILLS.get(r.status, "FFFFFF")
+                        for cell in ws_mis[ws_mis.max_row]:
+                            cell.fill = PatternFill("solid", fgColor=color)
 
         wb.save(self.xlsx_file)
 
@@ -293,6 +377,15 @@ class Reporter:
                         f"<td>{fr.pdf_value or '<em>—</em>'}</td>"
                         f"<td><span class='badge b-{s}'>{s}</span></td></tr>"
                     )
+                for t in result.tables:
+                    for r in t.row_results:
+                        s = r.status.value
+                        lines.append(
+                            f"<tr class='{s}'><td>Table [{t.table_name}] Row {r.row_index}</td>"
+                            f"<td>{' | '.join(r.ui_row)}</td>"
+                            f"<td>{' | '.join(r.pdf_row)}</td>"
+                            f"<td><span class='badge b-{s}'>{s}</span></td></tr>"
+                        )
                 lines.append("</tbody></table>")
             lines.append("</details>")
 

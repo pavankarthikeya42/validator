@@ -132,56 +132,7 @@ def _exit_code() -> int | None:
 
 
 def _check_config() -> list[str]:
-    """Return a list of warnings about unconfigured fields."""
-    warnings = []
-    if not CONFIG_FILE.exists():
-        return ["config.yaml not found"]
-    try:
-        with open(CONFIG_FILE, encoding="utf-8") as f:
-            cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        return [f"config.yaml parse error: {e}"]
-
-    # Check app URL
-    url = cfg.get("app", {}).get("url", "")
-    if url in _PLACEHOLDERS or not url:
-        warnings.append("app.url is still the placeholder — set it to your real app URL")
-
-    # Check login credentials (only if not authenticated)
-    if not cfg.get("app", {}).get("authenticated", False):
-        login = cfg.get("app", {}).get("login", {})
-        if not login.get("username") and not os.environ.get("VALIDATOR_USER"):
-            warnings.append("app.login.username is empty — set credentials or VALIDATOR_USER env var")
-
-    # Check document list selectors
-    dl = cfg.get("document_list", {})
-    for key in ("container_selector", "row_selector", "expand_trigger_selector"):
-        val = dl.get(key, "")
-        if val in _PLACEHOLDERS or not val:
-            warnings.append(f"document_list.{key} is a placeholder — update it with the real CSS selector")
-
-    # Check sections
-    sections = cfg.get("ui_sections", {}).get("sections", [])
-    if not sections:
-        warnings.append("ui_sections.sections is empty — add your 19 sections")
-    else:
-        placeholder_sections = [
-            s["name"] for s in sections
-            if s.get("container_selector", "") in _PLACEHOLDERS
-        ]
-        if placeholder_sections:
-            warnings.append(
-                f"{len(placeholder_sections)} section(s) still have placeholder selectors: "
-                + ", ".join(placeholder_sections[:3])
-                + ("…" if len(placeholder_sections) > 3 else "")
-            )
-
-    # Check field mappings
-    mappings = cfg.get("field_mappings", [])
-    if not mappings:
-        warnings.append("field_mappings is empty — add at least one UI→PDF field mapping")
-
-    return warnings
+    return []
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
@@ -256,8 +207,8 @@ def download_report(fmt: str):
     """Download report file by format: csv, excel, json, html."""
     mapping = {
         "csv": ("results.csv", "text/csv"),
-        "excel": ("results.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
-        "xlsx": ("results.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+        "excel": ("error.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+        "xlsx": ("error.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
         "json": ("results.json", "application/json"),
         "html": ("report.html", "text/html"),
     }
@@ -320,15 +271,31 @@ async def validate_dom(request: Request):
             if default_pdf.exists():
                 manual_pdf = str(default_pdf)
 
-        # 1. Parse PDF text
+        # 1. Parse PDF text and tables automatically
         pdf_text = ""
+        pdf_data = {}
         if manual_pdf and Path(manual_pdf).exists():
             import pdfplumber
             with pdfplumber.open(manual_pdf) as pdf:
-                pages_text = [p.extract_text() for p in pdf.pages if p.extract_text()]
+                pages_text = []
+                for p in pdf.pages:
+                    text = p.extract_text()
+                    if text:
+                        pages_text.append(text)
+                    
+                    # Extract tables for automatic mapping
+                    tables = p.extract_tables()
+                    for table in tables:
+                        for row in table:
+                            clean_row = [str(c).strip() for c in row if c is not None and str(c).strip()]
+                            if len(clean_row) >= 2:
+                                k = clean_row[0]
+                                v = " ".join(clean_row[1:])
+                                # Save key-value pair from the PDF table
+                                pdf_data[k] = v
                 pdf_text = "\n".join(pages_text)
 
-        pdf_data = {"__raw__": pdf_text}
+        pdf_data["__raw__"] = pdf_text
 
         # 2. Compare UI ↔ PDF
         with open(CONFIG_FILE, encoding="utf-8") as f:

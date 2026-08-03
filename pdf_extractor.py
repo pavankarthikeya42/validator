@@ -249,6 +249,43 @@ class PDFExtractor:
 
         return result
 
+    async def extract_tables(self) -> list[list[list[str]]]:
+        """Extract all tables from the PDF using pdfplumber."""
+        pdf_bytes = None
+        
+        # 1. Manual PDF
+        manual_path = self._pdf_cfg.get("manual_pdf_path", "")
+        if manual_path and Path(manual_path).exists():
+            with open(manual_path, "rb") as f:
+                pdf_bytes = f.read()
+                
+        # 2. Iframe src fallback
+        if not pdf_bytes:
+            iframe_sel = self._pdf_cfg.get("iframe_selector", "iframe")
+            candidates = [iframe_sel] if iframe_sel and iframe_sel != "iframe.pdf-viewer" else []
+            candidates.extend(["iframe[src*='pdf']", "iframe", "embed", "object"])
+            
+            for candidate in candidates:
+                try:
+                    iframe_el = self.page.locator(candidate).first
+                    if await iframe_el.count() == 0:
+                        continue
+                    src = await iframe_el.get_attribute("src") or await iframe_el.get_attribute("data")
+                    if not src:
+                        continue
+                    if not src.startswith("http"):
+                        base = self.page.url.rsplit("/", 1)[0]
+                        src = f"{base}/{src.lstrip('/')}"
+                    response = await self.page.request.get(src)
+                    if response.ok:
+                        pdf_bytes = await response.body()
+                        break
+                except Exception:
+                    continue
+                    
+        if pdf_bytes:
+            return _parse_pdf_bytes_for_tables(pdf_bytes)
+        return []
 
 def _parse_pdf_bytes(pdf_bytes: bytes) -> str:
     """Use pdfplumber to extract all text from PDF bytes."""
@@ -262,3 +299,24 @@ def _parse_pdf_bytes(pdf_bytes: bytes) -> str:
             return "\n".join(pages_text)
     except Exception as exc:
         return f"__pdfplumber_error__{exc}"
+
+def _parse_pdf_bytes_for_tables(pdf_bytes: bytes) -> list[list[list[str]]]:
+    """Use pdfplumber to extract all tables from PDF bytes. Returns a list of tables (list of rows (list of cells))."""
+    tables = []
+    try:
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            for page in pdf.pages:
+                page_tables = page.extract_tables()
+                for table in page_tables:
+                    # Clean up the table (replace None with empty string, strip whitespace)
+                    cleaned_table = []
+                    for row in table:
+                        cleaned_row = [str(cell).strip() if cell is not None else "" for cell in row]
+                        # skip completely empty rows
+                        if any(cleaned_row):
+                            cleaned_table.append(cleaned_row)
+                    if cleaned_table:
+                        tables.append(cleaned_table)
+    except Exception:
+        pass
+    return tables
