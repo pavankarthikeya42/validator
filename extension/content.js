@@ -701,12 +701,54 @@
     pollStatus();
   }
 
+  function extractLiveDOMSections() {
+    const sections = {};
+    const clean = (t) => t ? t.replace(/\s+/g, ' ').trim() : '';
+
+    // 1. Karithera <app-comparison> Web Component (Image 2)
+    const appComp = document.querySelector("app-comparison");
+    if (appComp) {
+      const rows = appComp.querySelectorAll("tr, div[class*='row'], div[class*='grid'] > div");
+      rows.forEach(row => {
+        const cells = row.querySelectorAll("td, th, div[class*='col'], div[class*='label'], span");
+        if (cells.length >= 2) {
+          const k = clean(cells[0].innerText);
+          const v = clean(cells[1].innerText);
+          if (k && v && k.length <= 80 && k.toLowerCase() !== v.toLowerCase()) {
+            sections[`Clinical Review > ${k}`] = v;
+          }
+        }
+      });
+    }
+
+    // 2. Visible tables
+    if (Object.keys(sections).length === 0) {
+      document.querySelectorAll("table").forEach((tbl, tIdx) => {
+        tbl.querySelectorAll("tr").forEach(row => {
+          const cells = row.querySelectorAll("td, th");
+          if (cells.length >= 2) {
+            const k = clean(cells[0].innerText);
+            const v = clean(cells[1].innerText);
+            if (k && v && k.length <= 80) {
+              sections[`Clinical Review > ${k}`] = v;
+            }
+          }
+        });
+      });
+    }
+
+    return sections;
+  }
+
   // ── Button handlers ────────────────────────────────────────────────────────────
   $('__dv_btn_start__').addEventListener('click', async () => {
     try {
       $('__dv_btn_start__').disabled = true;
       const logEl = $("__dv_log__");
-      if (logEl) { logEl.className = "__dv_log__"; logEl.textContent = "Starting…"; }
+      if (logEl) { logEl.className = "__dv_log__"; logEl.textContent = "Extracting page content…"; }
+
+      // 1. Extract live DOM sections directly from active tab
+      const uiData = extractLiveDOMSections();
 
       let manualPdfPath = "";
       const fileInput = $("__dv_manual_file__");
@@ -724,14 +766,18 @@
         }
       }
 
-      const res = await api('POST', '/start', {
+      if (logEl) { logEl.textContent = "Comparing UI ↔ PDF data…"; }
+
+      // 2. Validate extracted DOM sections directly against PDF
+      const res = await api('POST', '/validate-dom', {
         url: window.location.href,
+        ui_data: uiData,
         manual_pdf: manualPdfPath
       });
-      showToast(manualPdfPath ? '✅ Validation started with manual PDF' : '✅ Validation started on this page');
-      startPolling();
+
+      updateUI(res);
+      showToast('✅ Validation complete — reports ready for download!');
     } catch (err) {
-      // 422 = config warnings from server
       const msg = err.message || "";
       const logEl = $("__dv_log__");
       if (logEl) {

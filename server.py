@@ -302,6 +302,72 @@ async def upload_pdf(file: UploadFile = File(...)):
         return JSONResponse({"ok": False, "message": f"Upload failed: {exc}"}, status_code=500)
 
 
+@app.post("/validate-dom")
+async def validate_dom(request: Request):
+    """
+    Direct DOM validation endpoint.
+    Receives extracted UI data from extension content script,
+    parses manual PDF (or saved PDF), compares fields, and generates Excel/CSV reports.
+    """
+    try:
+        body = await request.json()
+        ui_data = body.get("ui_data", {})
+        target_url = body.get("url", "")
+        manual_pdf = body.get("manual_pdf", "")
+
+        if not manual_pdf or not Path(manual_pdf).exists():
+            default_pdf = REPORTS_DIR / "manual_input.pdf"
+            if default_pdf.exists():
+                manual_pdf = str(default_pdf)
+
+        # 1. Parse PDF text
+        pdf_text = ""
+        if manual_pdf and Path(manual_pdf).exists():
+            import pdfplumber
+            with pdfplumber.open(manual_pdf) as pdf:
+                pages_text = [p.extract_text() for p in pdf.pages if p.extract_text()]
+                pdf_text = "\n".join(pages_text)
+
+        pdf_data = {"__raw__": pdf_text}
+
+        # 2. Compare UI ↔ PDF
+        with open(CONFIG_FILE, encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+
+        from comparator import Comparator
+        from reporter import Reporter
+        from state import RunState
+
+        state = RunState()
+        state.total_documents = 1
+        state.start_time = time.time()
+
+        cmp = Comparator(cfg)
+        rep = Reporter(cfg, state)
+
+        res = cmp.compare("current_document", 0, ui_data, pdf_data)
+        rep.add_result(res)
+        rep.save_all()
+
+        state.mark_completed(0, "current_document", res.summary_dict())
+
+        return JSONResponse({
+            "ok": True,
+            "status": "COMPLETE",
+            "completed": 1,
+            "total": 1,
+            "matches": res.matches,
+            "mismatches": res.mismatches,
+            "missing": res.missing_in_pdf + res.missing_in_ui,
+            "fields_validated": res.total_fields,
+            "progress_pct": 100.0,
+            "excel_report": str(rep.xlsx_file.name),
+            "csv_report": str(rep.csv_file.name),
+        })
+    except Exception as exc:
+        return JSONResponse({"ok": False, "message": f"Validation failed: {exc}"}, status_code=500)
+
+
 @app.post("/start")
 async def start_validation(request: Request):
     global _process, _run_started_at
