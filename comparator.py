@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from enum import Enum
+import math
 from typing import Optional
 
 
@@ -154,15 +155,6 @@ class Comparator:
         doc_index: int,
         ui_data: dict[str, str],
         pdf_data: dict[str, str],
-    ) -> ComparisonResult:
-        result = ComparisonResult(doc_id=doc_id, doc_index=doc_index)
-
-    def compare(
-        self,
-        doc_id: str,
-        doc_index: int,
-        ui_data: dict[str, str],
-        pdf_data: dict[str, str],
         ui_tables: list[dict] = None,
         pdf_tables: list[list[list[str]]] = None,
     ) -> ComparisonResult:
@@ -219,17 +211,28 @@ class Comparator:
                 
                 ui_present = ui_val is not None and ui_val.strip() != ""
                 
+                def is_fuzzy_match(u_text, p_text):
+                    if not u_text or not p_text: return False
+                    n_u = _normalise(u_text)
+                    n_p = _normalise(p_text)
+                    if len(n_u) > 5 and n_u in n_p: return True
+                    if len(n_u) > 0 and len(n_u) <= 5:
+                        return bool(re.search(r'\b' + re.escape(n_u) + r'\b', n_p))
+                    
+                    # For very large texts, headers/footers in the PDF interrupt the text.
+                    # We chunk the normalized UI text and ensure a high percentage of chunks exist in the PDF.
+                    chunk_size = 50
+                    if len(n_u) > chunk_size:
+                        chunks = [n_u[i:i+chunk_size] for i in range(0, len(n_u), chunk_size)]
+                        matches = sum(1 for c in chunks if c in n_p)
+                        if matches / len(chunks) >= 0.7:  # 70% of chunks match perfectly
+                            return True
+                    return False
+
                 if not pdf_val and ui_present:
                     # 2. If it's a content section (or value wasn't found by label), just check if the UI value exists anywhere in the PDF!
-                    norm_ui = _normalise(ui_val)
-                    norm_raw_pdf = _normalise(raw_pdf_text)
-                    
-                    if len(norm_ui) > 5 and norm_ui in norm_raw_pdf:
-                        pdf_val = ui_val # Long text exists perfectly, treat as match!
-                    elif len(norm_ui) > 0 and len(norm_ui) <= 5:
-                        # For short text, ensure it's a distinct word to avoid false positives
-                        if re.search(r'' + re.escape(norm_ui) + r'', norm_raw_pdf):
-                            pdf_val = ui_val
+                    if is_fuzzy_match(ui_val, raw_pdf_text):
+                        pdf_val = ui_val # Long text exists perfectly (or close enough), treat as match!
 
                 ui_present = ui_val is not None and ui_val.strip() != ""
                 pdf_present = pdf_val is not None and pdf_val.strip() != ""
@@ -243,7 +246,15 @@ class Comparator:
                 else:
                     norm_ui = _normalise(ui_val)
                     norm_pdf = _normalise(pdf_val)
-                    status = FieldStatus.MATCH if (norm_ui == norm_pdf or norm_ui in norm_pdf or norm_pdf in norm_ui) else FieldStatus.MISMATCH
+                    
+                    # Also use fuzzy match for the final status check if they are explicitly mapped
+                    status = FieldStatus.MATCH if (
+                        norm_ui == norm_pdf or 
+                        norm_ui in norm_pdf or 
+                        norm_pdf in norm_ui or 
+                        is_fuzzy_match(ui_val, pdf_val)
+                    ) else FieldStatus.MISMATCH
+                    
                     result.fields.append(FieldResult(field_path=ui_path, ui_value=ui_val, pdf_value=pdf_val, status=status, normalised_ui=norm_ui, normalised_pdf=norm_pdf))
 
         # Detect extra fields in PDF that are not mapped
