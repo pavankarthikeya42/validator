@@ -48,7 +48,7 @@ document_list:
   expand_trigger_selector: ".doc-row-expand" # ← CHANGE
 
   # Selector that confirms a row is fully expanded and loaded
-  expanded_indicator_selector: ".doc-expanded" # ← CHANGE
+  expanded_indicator_selector: "app-comparison"
 
   # Button/element to click to collapse an expanded row
   collapse_trigger_selector: ".doc-row-collapse" # ← CHANGE
