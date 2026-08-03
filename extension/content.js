@@ -701,17 +701,79 @@
     pollStatus();
   }
 
-  function extractLiveDOMSections() {
+  async function extractLiveDOMSections() {
     const sections = {};
     const clean = (t) => t ? t.replace(/\s+/g, ' ').trim() : '';
 
+    const cmpTables = document.querySelectorAll("table.cmp-table");
+    if (cmpTables.length > 0) {
+      for (const table of cmpTables) {
+        const tbodies = table.querySelectorAll("tbody");
+        for (const tbody of tbodies) {
+          if (tbody.classList.contains("cmp-section-group")) {
+            const secRow = tbody.querySelector(".cmp-sec-row");
+            const secTextEl = tbody.querySelector(".cmp-sec-text");
+            const secName = secTextEl ? clean(secTextEl.innerText) : "";
+            
+            if (secRow && !secRow.classList.contains("cmp-sec-open")) {
+              secRow.click();
+              await new Promise(r => setTimeout(r, 400)); // wait for angular to render
+            }
+            
+            const contentEl = tbody.querySelector(".cmp-content-inner, .cmp-content-cell");
+            if (contentEl && secName) {
+                const innerTables = contentEl.querySelectorAll("table");
+                let hasTable = innerTables.length > 0;
+                if (hasTable) {
+                    let cIdx = 1;
+                    innerTables.forEach(tbl => {
+                        tbl.querySelectorAll("td, th, .cmp-td, .cmp-th").forEach(cell => {
+                            let cVal = clean(cell.innerText);
+                            if (cVal) sections[`${secName} > Table Cell ${cIdx++}`] = cVal;
+                        });
+                    });
+                }
+                
+                const inputs = contentEl.querySelectorAll("input, select, textarea, mat-select, .mat-select-value");
+                let iIdx = 1;
+                inputs.forEach(inp => {
+                    let val = "";
+                    if (inp.tagName === "SELECT") {
+                        if (inp.selectedIndex >= 0) val = inp.options[inp.selectedIndex].text;
+                    } else if (inp.tagName === "INPUT" || inp.tagName === "TEXTAREA") {
+                        val = inp.value;
+                    } else {
+                        val = inp.innerText;
+                    }
+                    val = clean(val);
+                    if (val) sections[`${secName} > Dropdown/Input ${iIdx++}`] = val;
+                });
+                
+                if (!hasTable) {
+                    const textContent = clean(contentEl.innerText);
+                    if (textContent) sections[`${secName} > Content`] = textContent;
+                }
+            }
+          } else {
+             tbody.querySelectorAll("tr").forEach(row => {
+                 const labelEl = row.querySelector(".cmp-td-label");
+                 const valEl = row.querySelector(".cmp-td-value");
+                 if (labelEl && valEl) {
+                     const k = clean(labelEl.innerText);
+                     const v = clean(valEl.innerText);
+                     if (k && v) sections[`Overview > ${k}`] = v;
+                 }
+             });
+          }
+        }
+      }
+      if (Object.keys(sections).length > 0) return sections;
+    }
+
     function extractPairsFromNode(rootNode) {
-      // Find row-like containers
       const rows = rootNode.querySelectorAll("tr, [class*='row'], [class*='grid'], [class*='item'], [class*='flex']");
       rows.forEach(row => {
-        // Must not contain other row-like containers to ensure we are at the leaf row level
         if (row.querySelector("tr, [class*='row'], [class*='grid'], [class*='item'], [class*='flex']")) return;
-
         const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT, null, false);
         const texts = [];
         let node;
@@ -721,7 +783,7 @@
         }
         if(texts.length >= 2) {
           const k = clean(texts[0]).replace(/:\s*$/, '');
-          const v = clean(texts.slice(1).join(" ")); // Join rest as value
+          const v = clean(texts.slice(1).join(" "));
           if(k && v && k.length <= 150 && k.toLowerCase() !== v.toLowerCase()) {
             sections[`UI Field > ${k}`] = v;
           }
@@ -733,11 +795,9 @@
     if (appComp) {
       extractPairsFromNode(appComp.shadowRoot || appComp);
     } else {
-      // Fallback to body
       extractPairsFromNode(document.body);
     }
 
-    // Also grab standard tables as fallback
     document.querySelectorAll("table").forEach(tbl => {
       tbl.querySelectorAll("tr").forEach(row => {
         const cells = row.querySelectorAll("td, th");
@@ -762,7 +822,7 @@
       if (logEl) { logEl.className = "__dv_log__"; logEl.textContent = "Extracting page content…"; }
 
       // 1. Extract live DOM sections directly from active tab
-      const uiData = extractLiveDOMSections();
+      const uiData = await extractLiveDOMSections();
 
       let manualPdfPath = "";
       const fileInput = $("__dv_manual_file__");
