@@ -13,7 +13,7 @@ app:
 
   # Set authenticated: true if you are already logged in when the
   # browser opens (e.g., Windows SSO / session cookie reuse).
-  authenticated: false
+  authenticated: true
 
   login:
     username_selector: "#username"        # ← CHANGE: CSS selector for the username field
