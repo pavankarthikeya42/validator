@@ -166,7 +166,24 @@ class DocumentListNavigator:
         await row_locator.scroll_into_view_if_needed()
 
         clicked = False
-        if expand_sel:
+
+        # Karithera UI: Checkbox + Compare button flow
+        try:
+            chk = row_locator.locator("input[type='checkbox'], [role='checkbox']").first
+            if await chk.count() > 0:
+                if not await chk.is_checked():
+                    await chk.click()
+                await asyncio.sleep(0.3)
+
+                compare_btn = self.page.locator("button:has-text('Compare'), [class*='Compare']").last
+                if await compare_btn.count() > 0 and await compare_btn.is_visible():
+                    await compare_btn.click()
+                    clicked = True
+                    await asyncio.sleep(1.5)
+        except Exception:
+            pass
+
+        if not clicked and expand_sel:
             try:
                 trigger = row_locator.locator(expand_sel).first
                 if await trigger.is_visible():

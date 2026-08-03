@@ -58,6 +58,29 @@ class UIExtractor:
         """Auto-detect all visible sections and key-value pairs on the page."""
         result: dict[str, str] = {}
         
+        # 0. Karithera Comparison View extraction (Image 2)
+        try:
+            comp_rows = self.page.locator("table tr, div[class*='grid'] > div, div[class*='row']")
+            count = await comp_rows.count()
+            for i in range(count):
+                row = comp_rows.nth(i)
+                if not await row.is_visible():
+                    continue
+                cells = row.locator("td, th, div[class*='col'], div[class*='label'], span")
+                cell_count = await cells.count()
+                if cell_count >= 2:
+                    k = _clean(await cells.nth(0).inner_text())
+                    v = _clean(await cells.nth(1).inner_text())
+                    if k and v and len(k) <= 60 and (
+                        k.isupper() or any(term in k.upper() for term in [
+                            "PRIORITY", "APPLICATION", "DIVISION", "THERAPEUTIC", "DOSAGE",
+                            "DOSING", "PHARMACOLOGIC", "APPROVAL", "SUBMIT", "RECEIVED", "REVIEW"
+                        ])
+                    ):
+                        result[f"Clinical Review > {k}"] = v
+        except Exception:
+            pass
+
         # 1. Extract from all visible <table> elements
         try:
             tables = self.page.locator("table")
