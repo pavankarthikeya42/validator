@@ -130,9 +130,40 @@ class UIExtractor:
                                 # Read content
                                 content_el = tbody.locator(".cmp-content-inner, .cmp-content-cell").first
                                 if await content_el.count() > 0 and await content_el.is_visible():
-                                    content = _clean(await content_el.inner_text())
-                                    if sec_name and content:
-                                        result[f"{sec_name} > Content"] = content
+                                    
+                                    # Extract inner tables
+                                    inner_tables = content_el.locator("table")
+                                    has_table = await inner_tables.count() > 0
+                                    if has_table:
+                                        cells = inner_tables.locator("td, th, .cmp-td, .cmp-th")
+                                        cell_cnt = await cells.count()
+                                        for c_idx in range(cell_cnt):
+                                            c_val = _clean(await cells.nth(c_idx).inner_text())
+                                            if c_val:
+                                                result[f"{sec_name} > Table Cell {c_idx+1}"] = c_val
+
+                                    # Extract inputs and dropdowns
+                                    inputs = content_el.locator("input, select, textarea, mat-select, .mat-select-value")
+                                    input_cnt = await inputs.count()
+                                    for i_idx in range(input_cnt):
+                                        inp = inputs.nth(i_idx)
+                                        tag = await inp.evaluate("el => el.tagName.toLowerCase()")
+                                        if tag == "select":
+                                            val = await inp.evaluate("el => el.options[el.selectedIndex]?.text || ''")
+                                        elif tag in ("input", "textarea"):
+                                            val = await inp.evaluate("el => el.value || ''")
+                                        else:
+                                            val = await inp.inner_text()
+                                            
+                                        val = _clean(val)
+                                        if val:
+                                            result[f"{sec_name} > Dropdown/Input {i_idx+1}"] = val
+
+                                    # If no table, extract the plain text content too
+                                    if not has_table:
+                                        text_content = _clean(await content_el.inner_text())
+                                        if text_content:
+                                            result[f"{sec_name} > Content"] = text_content
                     else:
                         # Basic top-level rows
                         rows = tbody.locator("tr")

@@ -222,8 +222,14 @@ class Comparator:
                 if not pdf_val and ui_present:
                     # 2. If it's a content section (or value wasn't found by label), just check if the UI value exists anywhere in the PDF!
                     norm_ui = _normalise(ui_val)
-                    if len(norm_ui) > 5 and norm_ui in _normalise(raw_pdf_text):
-                        pdf_val = ui_val # The text exists perfectly in the PDF, treat as match!
+                    norm_raw_pdf = _normalise(raw_pdf_text)
+                    
+                    if len(norm_ui) > 5 and norm_ui in norm_raw_pdf:
+                        pdf_val = ui_val # Long text exists perfectly, treat as match!
+                    elif len(norm_ui) > 0 and len(norm_ui) <= 5:
+                        # For short text, ensure it's a distinct word to avoid false positives
+                        if re.search(r'' + re.escape(norm_ui) + r'', norm_raw_pdf):
+                            pdf_val = ui_val
 
                 ui_present = ui_val is not None and ui_val.strip() != ""
                 pdf_present = pdf_val is not None and pdf_val.strip() != ""
