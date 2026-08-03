@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
       showProgress("Extracting DOM data...", 50);
       const domData = await getDOMData();
       hideProgress();
-      if (!domData || (Object.keys(domData).length === 1 && Object.keys(domData["General Information"] || {}).length === 0)) {
+      if (!domData || Object.keys(domData).length === 0) {
         alert("No structured data was found on the page to extract. Please make sure the section elements are present.");
         return;
       }
