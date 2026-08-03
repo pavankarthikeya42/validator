@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# Generated validation reports and state
+reports/
+state.json
+reports/manual_input.pdf
+
+# Environment
+.env
+venv/
+env/
+.venv/
