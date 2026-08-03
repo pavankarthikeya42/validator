@@ -282,24 +282,29 @@ class DocumentListNavigator:
             pass
 
     async def wait_for_all_sections(self) -> None:
-        """Wait until all 19 UI sections signal they are loaded."""
+        """Wait until all UI sections signal they are loaded."""
         ui_cfg = self.browser.cfg.get("ui_sections", {})
         indicator = ui_cfg.get("all_loaded_indicator", "")
-        timeout = self._timeouts.get("section_load", 20000)
+        timeout = self._timeouts.get("section_load", 10000)
 
-        if indicator:
-            await self.page.wait_for_selector(
-                indicator, state="visible", timeout=timeout
-            )
-        else:
-            # Fall back: wait for each section container to be visible
-            sections = ui_cfg.get("sections", [])
-            for section in sections:
-                sel = section.get("container_selector", "")
-                if sel:
-                    try:
-                        await self.page.wait_for_selector(
-                            sel, state="visible", timeout=timeout
-                        )
-                    except Exception:
-                        pass  # section might not always be present — don't abort
+        # Ignore placeholder indicator
+        if indicator and indicator != ".ui-sections-loaded":
+            try:
+                await self.page.wait_for_selector(
+                    indicator, state="visible", timeout=timeout
+                )
+                return
+            except Exception:
+                pass  # indicator timed out — proceed to auto-extraction
+
+        # Fallback wait candidates
+        fallback_indicators = ["app-comparison", "table", "div[class*='grid']", "div[class*='row']"]
+        for sel in fallback_indicators:
+            try:
+                if await self.page.locator(sel).count() > 0:
+                    await self.page.wait_for_selector(sel, state="visible", timeout=3000)
+                    return
+            except Exception:
+                continue
+
+        await asyncio.sleep(1.0)

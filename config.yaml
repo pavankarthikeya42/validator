@@ -65,9 +65,8 @@ document_list:
 # Fill in all 19. Duplicate the block below for each section.
 # ------------------------------------------------------------------
 ui_sections:
-  # Selector that must be present on ALL 19 sections before extraction starts.
-  # If sections load progressively, use the last section's selector here.
-  all_loaded_indicator: ".ui-sections-loaded"  # ← CHANGE
+  # Selector that must be present on ALL sections before extraction starts.
+  all_loaded_indicator: "app-comparison"
 
   sections:
     - name: "Section 1"                   # ← CHANGE to real section name
