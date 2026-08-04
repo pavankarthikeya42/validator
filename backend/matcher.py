@@ -33,7 +33,10 @@ def match_section(section_name: str, ui_text: str, pdf_blocks: list) -> dict:
     """
     # Normalize inputs
     norm_ui_text = normalize_text(ui_text)
-    if not norm_ui_text:
+    
+    # If the section is "Therapeutic Areas" and the value is none/na/empty, treat it as PASS (i.e. not needing to present/validate)
+    is_none_or_na = ui_text.strip().lower() in ["none", "n/a", "na", "none or n/a", "none or na", "not applicable"]
+    if not norm_ui_text or (section_name == "Therapeutic Areas" and is_none_or_na):
         return {
             "section": section_name,
             "similarity": 100.0,
