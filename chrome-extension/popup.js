@@ -5,14 +5,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const progressContainer = document.getElementById('progress-container');
   const progressFill = document.getElementById('progress-fill');
   const progressText = document.getElementById('progress-text');
-  
+
   const resultsArea = document.getElementById('results-area');
   const statAccuracy = document.getElementById('stat-accuracy');
   const statPassed = document.getElementById('stat-passed');
   const statPartial = document.getElementById('stat-partial');
   const statFailed = document.getElementById('stat-failed');
   const breakdownList = document.getElementById('breakdown-list');
-  
+
   const btnExportHtml = document.getElementById('btn-export-html');
   const btnExportCsv = document.getElementById('btn-export-csv');
   const btnExportJson = document.getElementById('btn-export-json');
@@ -60,7 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       showProgress("Extracting webpage data...", 20);
-      
+
       // Get DOM Data from active page
       const domData = await getDOMData();
       if (!domData || Object.keys(domData).length === 0) {
@@ -129,7 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
         target: { tabId: tab.id },
         func: () => {
           const uiData = {};
-          
+
           const requestedGeneralFields = [
             "Generic Name", "Review Type", "Priority / Standard", "Application #",
             "Division / Office", "Therapeutic Areas", "Dosage Form", "Dosing Regimen",
@@ -172,7 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
               }
             });
           }
-          
+
           const sectionRows = document.querySelectorAll('.cmp-sec-row');
           sectionRows.forEach(secRow => {
             const sectionName = secRow.querySelector('.cmp-sec-text')?.textContent.trim();
@@ -190,7 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
               }
             }
           });
-          
+
           return uiData;
         }
       });
@@ -219,13 +219,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function displayResults(data) {
     resultsArea.classList.remove('hidden');
-    
+
     // Summary metrics
     statAccuracy.textContent = `${data.summary.overall_accuracy}%`;
     statPassed.textContent = data.summary.passed;
     statPartial.textContent = data.summary.partial;
     statFailed.textContent = data.summary.failed;
-    
+
     // Cache reports
     reportData = data.reports;
 
