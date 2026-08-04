@@ -43,7 +43,8 @@ def match_section(section_name: str, ui_text: str, pdf_blocks: list) -> dict:
             "status": "PASS",
             "matched_text": [],
             "missing_text": [],
-            "pdf_pages": []
+            "pdf_pages": [],
+            "skipped": True
         }
         
     # Split the original ui_text into readable chunks for tracking
@@ -113,5 +114,6 @@ def match_section(section_name: str, ui_text: str, pdf_blocks: list) -> dict:
         "status": status,
         "matched_text": matched_chunks,
         "missing_text": missing_chunks,
-        "pdf_pages": sorted(list(matched_pages))
+        "pdf_pages": sorted(list(matched_pages)),
+        "skipped": False
     }

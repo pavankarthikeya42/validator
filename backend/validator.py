@@ -67,11 +67,13 @@ def validate_payload(dom_data: dict, pdf_bytes: bytes) -> dict:
             
     total_sections = len(filtered_dom)
     
-    # Overall Accuracy is the average similarity score across all sections
+    # Overall Accuracy is the average similarity score across all validated sections (excluding skipped ones)
+    validated_reports = [r for r in section_reports if not r.get("skipped", False)]
     overall_accuracy = (
-        sum(r["similarity"] for r in section_reports) / total_sections
-        if total_sections > 0 else 100.0
+        sum(r["similarity"] for r in validated_reports) / len(validated_reports)
+        if len(validated_reports) > 0 else 100.0
     )
+
     
     processing_time = time.time() - start_time
     
