@@ -36,21 +36,22 @@ def match_section(section_name: str, ui_text: str, pdf_blocks: list) -> dict:
     
     is_none_or_na = ui_text.strip().lower() in ["none", "n/a", "na", "none or n/a", "none or na", "not applicable"]
     is_date_field = "date" in section_name.lower()
+    is_therapeutic_areas = section_name == "Therapeutic Areas"
     
-    # If it is a date field and is empty, none, or N/A, it must FAIL validation
-    if is_date_field and (not norm_ui_text or is_none_or_na):
+    # If it is a date field or Therapeutic Areas, and is empty, none, or N/A, it must FAIL validation
+    if (is_date_field or is_therapeutic_areas) and (not norm_ui_text or is_none_or_na):
         return {
             "section": section_name,
             "similarity": 0.0,
             "status": "FAIL",
             "matched_text": [],
-            "missing_text": ["Date not retrieved, not addressed, or contains no data"],
+            "missing_text": [f"{section_name} not retrieved, not addressed, or contains no data/placeholder"],
             "pdf_pages": [],
             "skipped": False
         }
         
     # For other sections/fields, treat empty/N/A values as auto-passed (skipped)
-    if not norm_ui_text or (section_name == "Therapeutic Areas" and is_none_or_na):
+    if not norm_ui_text:
         return {
             "section": section_name,
             "similarity": 100.0,
