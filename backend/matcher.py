@@ -83,7 +83,7 @@ def match_section(section_name: str, ui_text: str, pdf_blocks: list) -> dict:
                 norm_chunk, 
                 choices, 
                 scorer=fuzz.partial_ratio, 
-                score_cutoff=95.0
+                score_cutoff=98.0
             )
             if result:
                 # result is (match_text, score, index)
