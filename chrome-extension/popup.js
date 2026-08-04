@@ -17,6 +17,43 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnExportCsv = document.getElementById('btn-export-csv');
   const btnExportJson = document.getElementById('btn-export-json');
   const btnExtract = document.getElementById('btn-extract');
+  const customFilenameInput = document.getElementById('custom-filename');
+
+  // Attempt to pre-populate custom filename from the page (.cmp-th-name and .cmp-th-sponsor)
+  (async () => {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab) {
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: () => {
+            const nameEl = document.querySelector('.cmp-th-name');
+            const sponsorEl = document.querySelector('.cmp-th-sponsor');
+            return {
+              name: nameEl ? nameEl.textContent.trim() : "",
+              sponsor: sponsorEl ? sponsorEl.textContent.trim() : ""
+            };
+          }
+        }, (results) => {
+          if (results && results[0] && results[0].result) {
+            const { name, sponsor } = results[0].result;
+            if (name) {
+              let defaultName = name;
+              if (sponsor) {
+                defaultName += `_${sponsor}`;
+              }
+              defaultName = defaultName.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/__+/g, '_');
+              if (customFilenameInput) {
+                customFilenameInput.value = defaultName;
+              }
+            }
+          }
+        });
+      }
+    } catch (e) {
+      console.warn("Could not pre-populate filename:", e);
+    }
+  })();
 
   let selectedFile = null;
   let reportData = null; // Stores reports from backend
@@ -33,7 +70,14 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       const jsonString = JSON.stringify(domData, null, 2);
-      downloadFile(jsonString, "application/json", "extracted_dom_data.json");
+      let filename = "extracted_dom_data.json";
+      if (customFilenameInput && customFilenameInput.value.trim()) {
+        filename = customFilenameInput.value.trim();
+        if (!filename.toLowerCase().endsWith('.json')) {
+          filename += '.json';
+        }
+      }
+      downloadFile(jsonString, "application/json", filename);
     } catch (error) {
       hideProgress();
       console.error(error);
@@ -273,7 +317,14 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     const jsonString = JSON.stringify(rawValidationResult, null, 2);
-    downloadFile(jsonString, "application/json", "validation_report.json");
+    let filename = "validation_report.json";
+    if (customFilenameInput && customFilenameInput.value.trim()) {
+      filename = customFilenameInput.value.trim();
+      if (!filename.toLowerCase().endsWith('.json')) {
+        filename += '.json';
+      }
+    }
+    downloadFile(jsonString, "application/json", filename);
   });
 
   function downloadFile(content, mimeType, filename) {
