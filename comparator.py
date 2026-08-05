@@ -14,7 +14,7 @@ from typing import Optional
 
 from section_matcher import (
     SemanticMatcher,
-    parse_blocks,
+    parse_pdf_blocks,
     unmatched_pdf_blocks,
     validate_section,
 )
@@ -162,6 +162,11 @@ class Comparator:
         self._semantic_threshold: float = float(
             validation.get("semantic_threshold", 0.75)
         )
+        self._skip_values: list[str] = [
+            s.lower() for s in validation.get(
+                "skip_ui_values", ["No data available for this section"]
+            )
+        ]
         self._semantic_sections: list[str] = [
             s.lower() for s in validation.get("semantic_sections", ["Metadata", "Indication"])
         ]
@@ -184,7 +189,7 @@ class Comparator:
         `validation.semantic_sections` are compared by meaning instead.
         """
         result = ComparisonResult(doc_id=doc_id, doc_index=doc_index)
-        pdf_blocks = parse_blocks(pdf_raw)
+        pdf_blocks = parse_pdf_blocks(pdf_raw)
         section_results = []
 
         grouped: dict[str, list[str]] = {}
@@ -195,6 +200,16 @@ class Comparator:
 
         for section, values in grouped.items():
             ui_val = "\n".join(values)
+            if ui_val.strip().lower() in self._skip_values:
+                result.fields.append(
+                    FieldResult(
+                        field_path=section,
+                        ui_value=ui_val,
+                        pdf_value=None,
+                        status=FieldStatus.SKIPPED,
+                    )
+                )
+                continue
             semantic = self._is_semantic(section)
             section_res = validate_section(
                 section=section,
