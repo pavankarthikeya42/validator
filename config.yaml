@@ -206,6 +206,24 @@ table_mappings:
   #   normalise: true
 
 # ------------------------------------------------------------------
+# Validation
+# Heading-anchored matching: the first heading of each UI section (e.g.
+# "1. Executive Summary") anchors it to the same heading in the PDF, and only
+# the text under that heading is compared. Extra numbered headings inside a
+# section (e.g. "2.3 Executive Summary") are anchored and compared separately.
+# Used when field_mappings is empty.
+# ------------------------------------------------------------------
+validation:
+  section_matching: true
+  match_threshold: 0.85          # literal block similarity required for MATCH
+  semantic_threshold: 0.75       # cosine similarity required for MATCH
+  semantic_model: "all-MiniLM-L6-v2"
+  # Sections compared by meaning rather than heading-anchored text
+  semantic_sections:
+    - "Metadata"
+    - "Indication"
+
+# ------------------------------------------------------------------
 # Output
 # ------------------------------------------------------------------
 output:

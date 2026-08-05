@@ -12,6 +12,13 @@ from enum import Enum
 import math
 from typing import Optional
 
+from section_matcher import (
+    SemanticMatcher,
+    parse_blocks,
+    unmatched_pdf_blocks,
+    validate_section,
+)
+
 
 class FieldStatus(str, Enum):
     MATCH = "MATCH"
@@ -149,6 +156,80 @@ class Comparator:
         self.cfg = config
         self._mappings: list[dict] = config.get("field_mappings", [])
 
+        validation = config.get("validation") or {}
+        self._section_validation: bool = validation.get("section_matching", True)
+        self._threshold: float = float(validation.get("match_threshold", 0.85))
+        self._semantic_threshold: float = float(
+            validation.get("semantic_threshold", 0.75)
+        )
+        self._semantic_sections: list[str] = [
+            s.lower() for s in validation.get("semantic_sections", ["Metadata", "Indication"])
+        ]
+        self._semantic = SemanticMatcher(
+            validation.get("semantic_model", "all-MiniLM-L6-v2")
+        )
+
+    def _is_semantic(self, section: str) -> bool:
+        name = section.lower()
+        return any(s in name for s in self._semantic_sections)
+
+    def compare_sections(
+        self, doc_id: str, doc_index: int, ui_data: dict[str, str], pdf_raw: str
+    ) -> ComparisonResult:
+        """
+        Heading-anchored validation.
+
+        Each UI section is anchored to the PDF by the heading it starts with,
+        and only the text under that heading is compared. Sections listed in
+        `validation.semantic_sections` are compared by meaning instead.
+        """
+        result = ComparisonResult(doc_id=doc_id, doc_index=doc_index)
+        pdf_blocks = parse_blocks(pdf_raw)
+        section_results = []
+
+        grouped: dict[str, list[str]] = {}
+        for ui_path, ui_val in ui_data.items():
+            if ui_path.startswith("__") or not (ui_val or "").strip():
+                continue
+            grouped.setdefault(ui_path.split(">")[0].strip(), []).append(ui_val.strip())
+
+        for section, values in grouped.items():
+            ui_val = "\n".join(values)
+            semantic = self._is_semantic(section)
+            section_res = validate_section(
+                section=section,
+                ui_text=ui_val,
+                pdf_blocks=pdf_blocks,
+                pdf_raw=pdf_raw,
+                threshold=self._semantic_threshold if semantic else self._threshold,
+                semantic=semantic,
+                matcher=self._semantic,
+            )
+            section_results.append(section_res)
+            for block in section_res.blocks:
+                result.fields.append(
+                    FieldResult(
+                        field_path=f"{section} > {block.heading}",
+                        ui_value=block.ui_text,
+                        pdf_value=block.pdf_text or None,
+                        status=FieldStatus(block.status),
+                        normalised_ui=f"similarity={block.similarity:.2f}",
+                        normalised_pdf="semantic" if block.semantic else "literal",
+                    )
+                )
+
+        for block in unmatched_pdf_blocks(pdf_blocks, section_results):
+            result.fields.append(
+                FieldResult(
+                    field_path=block.heading,
+                    ui_value=None,
+                    pdf_value=block.body,
+                    status=FieldStatus.MISSING_IN_UI,
+                )
+            )
+
+        return result
+
     def compare(
         self,
         doc_id: str,
@@ -158,8 +239,13 @@ class Comparator:
         ui_tables: list[dict] = None,
         pdf_tables: list[list[list[str]]] = None,
     ) -> ComparisonResult:
+        if self._section_validation and not self._mappings:
+            raw = pdf_data.get("__raw__", "")
+            if raw:
+                return self.compare_sections(doc_id, doc_index, ui_data, raw)
+
         result = ComparisonResult(doc_id=doc_id, doc_index=doc_index)
-        
+
         ui_tables = ui_tables or []
         pdf_tables = pdf_tables or []
 

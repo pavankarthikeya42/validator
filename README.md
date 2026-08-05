@@ -45,6 +45,8 @@ reports/  (JSON + CSV + Excel + HTML)
 | **Infinite scroll / Load More** | Automatically loads all records before starting |
 | **19 UI sections** | Waits for all sections to load before extracting |
 | **PDF extraction** | PDF.js DOM scraping + download+pdfplumber (auto-selected) |
+| **Heading-anchored validation** | Each UI section is anchored to its PDF heading; only text under that heading is compared |
+| **Semantic sections** | Metadata / Indication matched by meaning via local sentence-transformer embeddings |
 | **Smart comparison** | Match / Mismatch / Missing in PDF / Missing in UI |
 | **Normalisation** | Case, whitespace, date format (DD/MM/YYYY ↔ YYYY-MM-DD), currency |
 | **Resume support** | Picks up exactly where the last run stopped after any interruption |
@@ -158,6 +160,7 @@ python main.py --reset
 ├── ui_extractor.py      ← Extract data from 19 UI sections
 ├── pdf_extractor.py     ← Extract text from embedded PDF
 ├── comparator.py        ← Field comparison + normalisation engine
+├── section_matcher.py   ← Heading-anchored + semantic section validation
 ├── reporter.py          ← JSON / CSV / Excel / HTML report generation
 ├── state.py             ← Checkpoint file (state.json) for resume support
 ├── requirements.txt
@@ -208,7 +211,36 @@ pdf:
 | `iframe_src` | Canvas-only PDF.js or a plain `<iframe src="...pdf">` — downloads and parses with pdfplumber |
 | `auto` | Tries `pdfjs_dom` first, falls back to `iframe_src` |
 
+### Validation (heading-anchored)
+
+Used automatically when `field_mappings` is empty.
+
+```yaml
+validation:
+  section_matching: true
+  match_threshold: 0.85
+  semantic_threshold: 0.75
+  semantic_model: "all-MiniLM-L6-v2"
+  semantic_sections:
+    - "Metadata"
+    - "Indication"
+```
+
+The first heading of a UI section (e.g. `1. Executive Summary`) is its anchor: the
+same heading is located in the PDF and only the sub-headings and body text under
+it are compared. Any further numbered heading inside the same section (e.g.
+`2.3 Executive Summary`) is anchored and compared as its own block. A heading the
+UI shows but the PDF lacks is `MISSING_IN_PDF`; a PDF heading no UI section
+claimed is `MISSING_IN_UI`.
+
+Sections named in `semantic_sections` skip heading anchoring and are compared by
+meaning using local embeddings (`pip install sentence-transformers`; the model
+downloads once, ~90 MB). If the model is unavailable the comparison falls back to
+lexical similarity so a run never fails offline.
+
 ### Field Mappings
+
+Set these to override heading-anchored validation with explicit regex mappings.
 
 ```yaml
 field_mappings:
