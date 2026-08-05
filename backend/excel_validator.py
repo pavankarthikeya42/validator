@@ -57,19 +57,19 @@ class ExcelValidator:
         # Field Mappings: UI Field -> Excel Column
         field_mappings = {
             "Generic Name": "International non-proprietary name (INN) / common name",
-            "Review Name": "Medicine name",
-            "Product Name": "Medicine name",
+            "Review Name": "Name of medicine",
+            "Product Name": "Name of medicine",
             "Therapeutic Areas": "Therapeutic area (MeSH)",
-            "Pharmacologic Class": "Pharmacotherapeutic group",
-            "Dosage Form": "Pharmaceutical form",
-            "Marketing Authorisation Holder": "Marketing authorisation holder/company name",
-            "Date Of First Authorisation": "Date of issue of marketing authorisation valid throughout the European Union",
-            "Date Of Revision": "Revision date",
-            "Initial Approval": "Date of issue of marketing authorisation valid throughout the European Union",
-            "Revised Date": "Revision date",
-            "Outcome": "Authorisation status",
+            "Pharmacologic Class": "Pharmacotherapeutic group\n(human)",
+            "Dosage Form": "Pharmaceutical form", # Does not exist, will skip
+            "Marketing Authorisation Holder": "Marketing authorisation developer / applicant / holder",
+            "Date Of First Authorisation": "Marketing authorisation date",
+            "Date Of Revision": "Last updated date",
+            "Initial Approval": "Marketing authorisation date",
+            "Revised Date": "Last updated date",
+            "Outcome": "Medicine status",
             "Approval Type": "Conditional approval",
-            "Variations": "Condition / obligation"
+            "Variations": "Condition / obligation" # Does not exist, will skip
         }
         # Create a case-insensitive lookup dict for ui_data
         ui_data_lower = {k.lower(): v for k, v in ui_data.items()}
