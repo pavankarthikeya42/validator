@@ -1,77 +1,85 @@
-import fitz  # PyMuPDF
+import pdfplumber
+import io
 import re
 
-def is_heading(text: str, size: float, is_bold: bool) -> bool:
-    """Heuristic to determine if a text block is a heading."""
+def is_heading(text: str) -> bool:
+    """Heuristic to determine if a text block is a heading based strictly on text matching."""
     clean_text = text.strip()
     # Numbered heading e.g., "1. Executive Summary" or "2.3. Overview"
     if re.match(r'^(\d+\.)+\s+[A-Za-z]', clean_text) or re.match(r'^\d+\s+[A-Za-z]', clean_text):
         return True
-    # All caps, short, bold
+    # All caps, short
     if clean_text.isupper() and 3 < len(clean_text) < 100:
         return True
     return False
 
+def format_table(table) -> str:
+    """Formats a nested list table into a markdown string."""
+    if not table: return ""
+    lines = []
+    for row in table:
+        clean_row = [str(cell).replace('\n', ' ').strip() if cell else "" for cell in row]
+        lines.append(" | ".join(clean_row))
+    return "\n".join(lines)
+
 def extract_pdf_data(pdf_bytes: bytes) -> list:
     """
-    Extracts text blocks from the PDF bytes and tags them with their heading.
+    Extracts text blocks and tables from the PDF bytes and tags them with their heading.
     Returns a list of dicts: [{"text": str, "page": int, "bbox": [x0, y0, x1, y1], "heading": str}]
     """
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     extracted_blocks = []
-    
     current_heading = "Document Start"
     
-    for page_idx in range(len(doc)):
-        page = doc[page_idx]
-        page_num = page_idx + 1
-        height = page.rect.height
-        
-        top_margin = height * 0.08
-        bottom_margin = height * 0.92
-        
-        dict_data = page.get_text("dict")
-        
-        for block in dict_data.get("blocks", []):
-            if block.get("type") != 0:
-                continue
-                
-            block_text = ""
-            max_size = 0.0
-            is_bold = False
-            bbox = block.get("bbox", [0, 0, 0, 0])
-            x0, y0, x1, y1 = bbox
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as doc:
+        for page_idx, page in enumerate(doc.pages):
+            page_num = page_idx + 1
+            height = page.height
+            width = page.width
             
-            # Reconstruct text and get style info
-            for line in block.get("lines", []):
-                for span in line.get("spans", []):
-                    block_text += span.get("text", "") + " "
-                    size = span.get("size", 0.0)
-                    if size > max_size:
-                        max_size = size
-                    flags = span.get("flags", 0)
-                    if flags & 2**4: # bit 4 is bold in PyMuPDF
-                        is_bold = True
-                        
-            clean_text = block_text.strip()
-            if not clean_text:
-                continue
-                
-            # Filter headers/footers
-            if y1 < top_margin or y0 > bottom_margin:
-                if re.match(r'^\d+$', clean_text) or \
-                   re.match(r'^page\s+\d+(\s+of\s+\d+)?$', clean_text, re.IGNORECASE) or \
-                   len(clean_text) < 30:
-                    continue
+            top_margin = height * 0.08
+            bottom_margin = height * 0.92
+            
+            # 1. Extract Text Layout
+            # We use extract_text_lines to get text blocks with bounding boxes
+            text_lines = page.extract_text_lines()
+            if text_lines:
+                for line_obj in text_lines:
+                    text = line_obj.get("text", "").strip()
+                    top = line_obj.get("top", 0)
+                    bottom = line_obj.get("bottom", height)
                     
-            if is_heading(clean_text, max_size, is_bold):
-                current_heading = clean_text
-                
-            extracted_blocks.append({
-                "text": clean_text,
-                "page": page_num,
-                "bbox": [x0, y0, x1, y1],
-                "heading": current_heading
-            })
+                    if not text:
+                        continue
+                        
+                    # Filter headers/footers
+                    if bottom < top_margin or top > bottom_margin:
+                        if re.match(r'^\d+$', text) or \
+                           re.match(r'^page\s+\d+(\s+of\s+\d+)?$', text, re.IGNORECASE) or \
+                           len(text) < 30:
+                            continue
+                            
+                    if is_heading(text):
+                        current_heading = text
+                        
+                    extracted_blocks.append({
+                        "text": text,
+                        "page": page_num,
+                        "bbox": [line_obj.get("x0", 0), top, line_obj.get("x1", width), bottom],
+                        "heading": current_heading
+                    })
             
+            # 2. Extract Tables
+            # Extract tables exactly as they appear and treat each table as a special block.
+            tables = page.extract_tables()
+            if tables:
+                for table in tables:
+                    table_str = format_table(table)
+                    if table_str.strip():
+                        extracted_blocks.append({
+                            "text": table_str,
+                            "page": page_num,
+                            "bbox": [0, 0, width, height],
+                            "heading": current_heading
+                        })
+                        
     return extracted_blocks
