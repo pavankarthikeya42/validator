@@ -92,10 +92,18 @@ def validate_payload(dom_data: dict, pdf_bytes: bytes) -> dict:
 
     # 3b. Validate Dynamic Sections against PDF (supports EPAR dynamically)
     dynamic_sections = [k for k in flat_dom.keys() if k.lower() not in requested_general_fields_lower]
+    dynamic_reports = []
+    
     for section_name in dynamic_sections:
         ui_value = flat_dom.get(section_name, "")
         report = match_section(section_name, ui_value, pdf_blocks)
         section_reports.append(report)
+        dynamic_reports.append(report)
+        
+        status = report["status"]
+        if status == "PASS": passed_count += 1
+        elif status == "PARTIAL": partial_count += 1
+        else: failed_count += 1
         
     total_sections = len(flat_dom)
     
@@ -118,5 +126,5 @@ def validate_payload(dom_data: dict, pdf_bytes: bytes) -> dict:
             "processing_time_seconds": round(processing_time, 3)
         },
         "metadata_validation": metadata_validation,
-        "sections": section_reports
+        "sections": dynamic_reports
     }
