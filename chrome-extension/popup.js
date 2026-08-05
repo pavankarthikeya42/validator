@@ -1,6 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const fileInput = document.getElementById('pdf-upload');
-  const fileNameDisplay = document.getElementById('file-name');
   const btnValidate = document.getElementById('btn-validate');
   const progressContainer = document.getElementById('progress-container');
   const progressFill = document.getElementById('progress-fill');
@@ -55,7 +53,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   })();
 
-  let selectedFile = null;
   let reportData = null; // Stores reports from backend
   let rawValidationResult = null; // Stores raw JSON validation response
 
@@ -85,24 +82,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // 1. File Upload Handler
-  fileInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      selectedFile = file;
-      fileNameDisplay.textContent = file.name;
-      btnValidate.disabled = false;
-    }
-  });
-
-  // 2. Validate Data Handler
+  // 1. Validate Data Handler
   btnValidate.addEventListener('click', async () => {
     try {
       showProgress("Extracting webpage data...", 20);
 
       // Get DOM Data from active page
       const domDataResponse = await getDOMData();
-      let fileToUpload = selectedFile;
+      let fileToUpload = null;
       let pdfBase64 = null;
       let domData = domDataResponse;
       let pdfUrl = null;
@@ -118,34 +105,32 @@ document.addEventListener('DOMContentLoaded', () => {
         throw new Error("Could not extract any data from the active tab. Please make sure you are on the Karthera comparison page.");
       }
 
-      // Auto-fetch PDF if the user didn't upload one manually
-      if (!fileToUpload) {
-        if (pdfBase64) {
-          showProgress("Processing intercepted PDF...", 40);
-          try {
-            const res = await fetch(pdfBase64);
-            const pdfBlob = await res.blob();
-            fileToUpload = new File([pdfBlob], "downloaded_document.pdf", { type: "application/pdf" });
-          } catch (fetchErr) {
-            console.error(fetchErr);
-            throw new Error("Failed to process intercepted PDF. Please download it manually and upload.");
-          }
-        } else if (pdfUrl) {
-          showProgress("Downloading PDF automatically...", 40);
-          try {
-            const pdfRes = await fetch(pdfUrl);
-            if (!pdfRes.ok) throw new Error("Failed to fetch PDF from URL");
-            const pdfBlob = await pdfRes.blob();
-            fileToUpload = new File([pdfBlob], "downloaded_document.pdf", { type: "application/pdf" });
-          } catch (fetchErr) {
-            console.error(fetchErr);
-            throw new Error("Failed to download PDF automatically. Please download it manually and upload.");
-          }
-        } else {
-          alert("No PDF file uploaded and no PDF download link found on the page. Please upload a PDF manually.");
-          hideProgress();
-          return;
+      // Process intercepted PDF
+      if (pdfBase64) {
+        showProgress("Processing intercepted PDF...", 40);
+        try {
+          const res = await fetch(pdfBase64);
+          const pdfBlob = await res.blob();
+          fileToUpload = new File([pdfBlob], "downloaded_document.pdf", { type: "application/pdf" });
+        } catch (fetchErr) {
+          console.error(fetchErr);
+          throw new Error("Failed to process intercepted PDF.");
         }
+      } else if (pdfUrl) {
+        showProgress("Downloading PDF automatically...", 40);
+        try {
+          const pdfRes = await fetch(pdfUrl);
+          if (!pdfRes.ok) throw new Error("Failed to fetch PDF from URL");
+          const pdfBlob = await pdfRes.blob();
+          fileToUpload = new File([pdfBlob], "downloaded_document.pdf", { type: "application/pdf" });
+        } catch (fetchErr) {
+          console.error(fetchErr);
+          throw new Error("Failed to download PDF automatically.");
+        }
+      } else {
+        alert("No PDF intercept found. Please click on the document link in the Karthera page before validating.");
+        hideProgress();
+        return;
       }
 
       showProgress("Uploading PDF and DOM data to FastAPI...", 55);
