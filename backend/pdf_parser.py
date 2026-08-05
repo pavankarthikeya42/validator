@@ -1,59 +1,77 @@
 import fitz  # PyMuPDF
 import re
 
+def is_heading(text: str, size: float, is_bold: bool) -> bool:
+    """Heuristic to determine if a text block is a heading."""
+    clean_text = text.strip()
+    # Numbered heading e.g., "1. Executive Summary" or "2.3. Overview"
+    if re.match(r'^(\d+\.)+\s+[A-Za-z]', clean_text) or re.match(r'^\d+\s+[A-Za-z]', clean_text):
+        return True
+    # All caps, short, bold
+    if clean_text.isupper() and 3 < len(clean_text) < 100:
+        return True
+    return False
+
 def extract_pdf_data(pdf_bytes: bytes) -> list:
     """
-    Extracts text blocks from the PDF bytes.
-    Returns a list of dicts: [{"text": str, "page": int, "rect": [x0, y0, x1, y1]}]
-    Filters out typical headers, footers, page numbers.
+    Extracts text blocks from the PDF bytes and tags them with their heading.
+    Returns a list of dicts: [{"text": str, "page": int, "bbox": [x0, y0, x1, y1], "heading": str}]
     """
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     extracted_blocks = []
     
+    current_heading = "Document Start"
+    
     for page_idx in range(len(doc)):
         page = doc[page_idx]
         page_num = page_idx + 1
-        width = page.rect.width
         height = page.rect.height
         
-        # We define header/footer boundaries (approx 10% of height from top/bottom)
-        # and ignore blocks completely inside these zones.
         top_margin = height * 0.08
         bottom_margin = height * 0.92
         
-        # Get blocks of text
-        # "blocks" format: (x0, y0, x1, y1, "text", block_no, block_type)
-        blocks = page.get_text("blocks")
+        dict_data = page.get_text("dict")
         
-        for b in blocks:
-            x0, y0, x1, y1, text, block_no, block_type = b
-            
-            # Skip image blocks
-            if block_type != 0:
+        for block in dict_data.get("blocks", []):
+            if block.get("type") != 0:
                 continue
                 
-            clean_text = text.strip()
+            block_text = ""
+            max_size = 0.0
+            is_bold = False
+            bbox = block.get("bbox", [0, 0, 0, 0])
+            x0, y0, x1, y1 = bbox
+            
+            # Reconstruct text and get style info
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    block_text += span.get("text", "") + " "
+                    size = span.get("size", 0.0)
+                    if size > max_size:
+                        max_size = size
+                    flags = span.get("flags", 0)
+                    if flags & 2**4: # bit 4 is bold in PyMuPDF
+                        is_bold = True
+                        
+            clean_text = block_text.strip()
             if not clean_text:
                 continue
                 
-            # Filter out headers and footers based on position
-            # If the block is entirely above top_margin or below bottom_margin
+            # Filter headers/footers
             if y1 < top_margin or y0 > bottom_margin:
-                # Also double-check if it looks like a page number or header to avoid false positives
-                # e.g., "Page 1", "Page 1 of 10", "1", "CONFIDENTIAL"
                 if re.match(r'^\d+$', clean_text) or \
                    re.match(r'^page\s+\d+(\s+of\s+\d+)?$', clean_text, re.IGNORECASE) or \
-                   len(clean_text) < 30: # typically headers/footers are short
+                   len(clean_text) < 30:
                     continue
-            
-            # Skip line numbers or standalone page numbers at bottom/top
-            if re.match(r'^\d+$', clean_text) and (y0 > bottom_margin or y1 < top_margin):
-                continue
+                    
+            if is_heading(clean_text, max_size, is_bold):
+                current_heading = clean_text
                 
             extracted_blocks.append({
                 "text": clean_text,
                 "page": page_num,
-                "bbox": [x0, y0, x1, y1]
+                "bbox": [x0, y0, x1, y1],
+                "heading": current_heading
             })
             
     return extracted_blocks

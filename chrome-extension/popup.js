@@ -97,25 +97,62 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 2. Validate Data Handler
   btnValidate.addEventListener('click', async () => {
-    if (!selectedFile) {
-      alert("Please upload a PDF first.");
-      return;
-    }
-
     try {
       showProgress("Extracting webpage data...", 20);
 
       // Get DOM Data from active page
-      const domData = await getDOMData();
+      const domDataResponse = await getDOMData();
+      let fileToUpload = selectedFile;
+      let pdfBase64 = null;
+      let domData = domDataResponse;
+      let pdfUrl = null;
+      
+      // Handle the case where content.js returns { uiData, pdfUrl, pdfBase64 }
+      if (domDataResponse && domDataResponse.uiData) {
+        domData = domDataResponse.uiData;
+        pdfUrl = domDataResponse.pdfUrl;
+        pdfBase64 = domDataResponse.pdfBase64;
+      }
+
       if (!domData || Object.keys(domData).length === 0) {
         throw new Error("Could not extract any data from the active tab. Please make sure you are on the Karthera comparison page.");
+      }
+
+      // Auto-fetch PDF if the user didn't upload one manually
+      if (!fileToUpload) {
+        if (pdfBase64) {
+          showProgress("Processing intercepted PDF...", 40);
+          try {
+            const res = await fetch(pdfBase64);
+            const pdfBlob = await res.blob();
+            fileToUpload = new File([pdfBlob], "downloaded_document.pdf", { type: "application/pdf" });
+          } catch (fetchErr) {
+            console.error(fetchErr);
+            throw new Error("Failed to process intercepted PDF. Please download it manually and upload.");
+          }
+        } else if (pdfUrl) {
+          showProgress("Downloading PDF automatically...", 40);
+          try {
+            const pdfRes = await fetch(pdfUrl);
+            if (!pdfRes.ok) throw new Error("Failed to fetch PDF from URL");
+            const pdfBlob = await pdfRes.blob();
+            fileToUpload = new File([pdfBlob], "downloaded_document.pdf", { type: "application/pdf" });
+          } catch (fetchErr) {
+            console.error(fetchErr);
+            throw new Error("Failed to download PDF automatically. Please download it manually and upload.");
+          }
+        } else {
+          alert("No PDF file uploaded and no PDF download link found on the page. Please upload a PDF manually.");
+          hideProgress();
+          return;
+        }
       }
 
       showProgress("Uploading PDF and DOM data to FastAPI...", 55);
 
       // Send to FastAPI
       const formData = new FormData();
-      formData.append("pdf", selectedFile);
+      formData.append("pdf", fileToUpload);
       formData.append("dom_data", JSON.stringify(domData));
 
       const response = await fetch("http://localhost:8000/validate", {
@@ -150,7 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
         throw new Error("No active tab found. Please make sure your window is focused on the page.");
       }
 
-      // Try messaging content script first (much safer if page has CSP or activeTab sandbox boundaries)
+      // Try messaging content script first
       try {
         const response = await new Promise((resolve, reject) => {
           chrome.tabs.sendMessage(tab.id, { action: "extractDOM" }, (res) => {
@@ -163,90 +200,22 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         if (response && response.success && response.data) {
           return response.data;
+        } else if (response && !response.success) {
+          throw new Error("Content script error: " + response.error);
         }
       } catch (msgErr) {
-        console.warn("Message passing failed, falling back to scripting.executeScript:", msgErr);
-      }
-
-      // Fallback: Try scripting API directly
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => {
-          const uiData = {};
-
-          const requestedGeneralFields = [
-            "Generic Name", "Review Type", "Priority / Standard", "Application #",
-            "Division / Office", "Therapeutic Areas", "Dosage Form", "Dosing Regimen",
-            "Pharmacologic Class", "Approval Date", "Submit Date", "Received Date",
-            "Review Completion", "Review Name"
-          ];
-
-          const requestedSections = [
-            "Indication", "Executive / Product / Summary Review", "Background / Therapeutic Context",
-            "Regulatory Background / History / Considerations", "CMC / Product Quality",
-            "Nonclinical Pharmacology / Toxicology", "Clinical Pharmacology", "Clinical Filing Checklist",
-            "Clinical Data and Review Strategy", "Efficacy", "Safety", "Risk Assessments / Risk Evaluation and Mitigation",
-            "Postmarketing Requirements", "Labeling Recommendations", "Advisory Committee Review",
-            "Ethics and Good Clinical Practices", "Other Significant Issues Identified", "Appendices"
-          ];
-
-          // Initialize all requested general fields to empty string
-          requestedGeneralFields.forEach(field => {
-            uiData[field] = "";
-          });
-
-          // Initialize all requested sections to empty string
-          requestedSections.forEach(section => {
-            uiData[section] = "";
-          });
-
-          const firstTbody = document.querySelector('.cmp-table > tbody:not(.cmp-section-group)');
-          if (firstTbody) {
-            const rows = firstTbody.querySelectorAll('tr');
-            rows.forEach(row => {
-              const labelEl = row.querySelector('.cmp-td-label');
-              const valueEl = row.querySelector('.cmp-td-value span') || row.querySelector('.cmp-td-value');
-              if (labelEl && valueEl) {
-                const labelText = labelEl.textContent.trim();
-                const normalizedLabel = labelText.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-                const matchedField = requestedGeneralFields.find(f => f.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === normalizedLabel);
-                if (matchedField) {
-                  uiData[matchedField] = valueEl.textContent.trim();
-                }
-              }
-            });
-          }
-
-          const sectionRows = document.querySelectorAll('.cmp-sec-row');
-          sectionRows.forEach(secRow => {
-            const sectionName = secRow.querySelector('.cmp-sec-text')?.textContent.trim();
-            if (sectionName) {
-              const normalizedSec = sectionName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-              const matchedSec = requestedSections.find(s => s.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === normalizedSec);
-              if (matchedSec) {
-                let nextEl = secRow.nextElementSibling;
-                if (nextEl && nextEl.classList.contains('cmp-sec-content')) {
-                  const content = nextEl.querySelector('.cmp-content-inner')?.textContent.trim() || nextEl.textContent.trim();
-                  if (content) {
-                    uiData[matchedSec] = content;
-                  }
-                }
-              }
-            }
-          });
-
-          return uiData;
+        if (msgErr.message && msgErr.message.includes("Content script error")) {
+          throw msgErr; // Re-throw actual content script runtime errors
         }
-      });
-
-      if (results && results[0] && results[0].result) {
-        return results[0].result;
+        console.warn("Message passing failed:", msgErr);
+        throw new Error("The extension script is not loaded on this page. Please refresh the Karthera webpage (F5) and click Validate again.");
       }
-    } catch (e) {
-      console.error("DOM Extraction failed:", e);
-      throw e;
+      
+      return null;
+    } catch (err) {
+      console.error(err);
+      throw err;
     }
-    return null;
   }
 
   // 4. UI Helper Functions

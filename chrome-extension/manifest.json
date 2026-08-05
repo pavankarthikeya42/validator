@@ -23,5 +23,11 @@
   "host_permissions": [
     "http://localhost:8000/*",
     "*://*/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["inject.js"],
+      "matches": ["*://*/*"]
+    }
   ]
 }

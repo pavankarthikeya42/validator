@@ -11,33 +11,24 @@ def validate_payload(dom_data: dict, pdf_bytes: bytes) -> dict:
     start_time = time.time()
     
     requested_general_fields = [
+        # Clinical Review fields
         "Generic Name", "Review Type", "Priority / Standard", "Application #",
         "Division / Office", "Therapeutic Areas", "Dosage Form", "Dosing Regimen",
         "Pharmacologic Class", "Approval Date", "Submit Date", "Received Date",
-        "Review Completion", "Review Name"
+        "Review Completion", "Review Name",
+        # EPAR fields
+        "Product Name", "Marketing Authorisation Holder", "Date Of First Authorisation",
+        "Date Of Revision", "Variations", "Initial Documents", "Outcome", "Source",
+        "Initial Approval", "Approval Type", "Revised Date"
     ]
 
-    requested_sections = [
-        "Indication", "Executive / Product / Summary Review", "Background / Therapeutic Context",
-        "Regulatory Background / History / Considerations", "CMC / Product Quality",
-        "Nonclinical Pharmacology / Toxicology", "Clinical Pharmacology", "Clinical Filing Checklist",
-        "Clinical Data and Review Strategy", "Efficacy", "Safety", "Risk Assessments / Risk Evaluation and Mitigation",
-        "Postmarketing Requirements", "Labeling Recommendations", "Advisory Committee Review",
-        "Ethics and Good Clinical Practices", "Other Significant Issues Identified", "Appendices"
-    ]
-    
     # 1. Parse/Flatten DOM Data
     flat_dom = parse_dom_payload(dom_data)
     
-    # Filter flat_dom to ONLY include the 14 metadata fields and 18 sections
-    filtered_dom = {}
-    for key in requested_general_fields + requested_sections:
-        filtered_dom[key] = flat_dom.get(key, "")
-
     # 2. Extract PDF Data
     pdf_blocks = extract_pdf_data(pdf_bytes)
     
-    # 3. Perform Validation for each section
+    # 3. Perform Validation
     section_reports = []
     metadata_validation = {}
     
@@ -45,27 +36,68 @@ def validate_payload(dom_data: dict, pdf_bytes: bytes) -> dict:
     partial_count = 0
     failed_count = 0
     
-    for section_name, ui_value in filtered_dom.items():
+    # 3a. Validate Metadata against Excel
+    try:
+        from excel_validator import ExcelValidator
+        excel_val = ExcelValidator()
+        excel_results = excel_val.validate_metadata(flat_dom)
+    except Exception as e:
+        import logging
+        logging.getLogger("validator_backend").error(f"Excel validation failed: {e}")
+        excel_results = {}
+        
+    flat_dom_lower = {k.lower(): k for k in flat_dom.keys()}
+    requested_general_fields_lower = [f.lower() for f in requested_general_fields]
+    
+    # Only validate metadata fields that are actually present in the UI
+    present_metadata_fields = [f for f in requested_general_fields if f.lower() in flat_dom_lower]
+    
+    for section_name in present_metadata_fields:
+        if "error" in excel_results:
+            report = {
+                "section": section_name,
+                "status": "FAIL",
+                "similarity": 0.0,
+                "matched_text": [],
+                "missing_text": [f"Excel Error: {excel_results['error']}"],
+                "pdf_pages": [],
+                "skipped": False
+            }
+        elif section_name in excel_results:
+            report = excel_results[section_name]
+        else:
+            report = {
+                "section": section_name,
+                "status": "PASS",
+                "similarity": 100.0,
+                "matched_text": [],
+                "missing_text": [],
+                "pdf_pages": [],
+                "skipped": True
+            }
+            
+        section_reports.append(report)
+        status = report["status"]
+        if status == "PASS": passed_count += 1
+        elif status == "PARTIAL": partial_count += 1
+        else: failed_count += 1
+        
+        metadata_validation[section_name] = {
+            "status": status,
+            "similarity": report["similarity"],
+            "matched_text": report.get("matched_text", []),
+            "missing_text": report.get("missing_text", []),
+            "pdf_pages": report["pdf_pages"]
+        }
+
+    # 3b. Validate Dynamic Sections against PDF (supports EPAR dynamically)
+    dynamic_sections = [k for k in flat_dom.keys() if k.lower() not in requested_general_fields_lower]
+    for section_name in dynamic_sections:
+        ui_value = flat_dom.get(section_name, "")
         report = match_section(section_name, ui_value, pdf_blocks)
         section_reports.append(report)
         
-        status = report["status"]
-        if status == "PASS":
-            passed_count += 1
-        elif status == "PARTIAL":
-            partial_count += 1
-        else:
-            failed_count += 1
-            
-        # Distinguish between General Information (metadata) and dynamic sections
-        if section_name in requested_general_fields:
-            metadata_validation[section_name] = {
-                "status": status,
-                "similarity": report["similarity"],
-                "pdf_pages": report["pdf_pages"]
-            }
-            
-    total_sections = len(filtered_dom)
+    total_sections = len(flat_dom)
     
     # Overall Accuracy is the average similarity score across all validated sections (excluding skipped ones)
     validated_reports = [r for r in section_reports if not r.get("skipped", False)]
@@ -74,7 +106,6 @@ def validate_payload(dom_data: dict, pdf_bytes: bytes) -> dict:
         if len(validated_reports) > 0 else 100.0
     )
 
-    
     processing_time = time.time() - start_time
     
     return {
