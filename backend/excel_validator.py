@@ -78,15 +78,36 @@ class ExcelValidator:
             ui_val_raw = ui_data_lower.get(ui_field.lower(), "")
             ui_val = str(ui_val_raw).strip().lower()
             
-            # If UI field isn't present, skip
-            if not ui_val or ui_val == "none" or ui_val == "n/a":
-                continue
+            is_none_or_na = not ui_val or ui_val in ["none", "n/a"]
                 
             if excel_col in self.df.columns:
                 excel_val = str(matched_row.get(excel_col, "")).strip().lower()
+                is_excel_empty = not excel_val or excel_val == "nan"
                 
+                # If both are empty, it's a PASS (or PARTIAL to indicate placeholder)
+                if is_none_or_na and is_excel_empty:
+                    results[ui_field] = {
+                        "section": ui_field,
+                        "status": "PARTIAL",
+                        "similarity": 100.0,
+                        "matched_text": [],
+                        "missing_text": ["No data provided in UI or Excel"],
+                        "pdf_pages": ["Excel"],
+                        "skipped": False
+                    }
+                # If UI is empty but Excel has data, it's a FAIL
+                elif is_none_or_na and not is_excel_empty:
+                    results[ui_field] = {
+                        "section": ui_field,
+                        "status": "FAIL",
+                        "similarity": 0.0,
+                        "matched_text": [],
+                        "missing_text": [f"Expected: {matched_row.get(excel_col, 'N/A')}"],
+                        "pdf_pages": ["Excel"],
+                        "skipped": False
+                    }
                 # Check for match
-                if ui_val in excel_val or excel_val in ui_val:
+                elif ui_val in excel_val or excel_val in ui_val:
                     results[ui_field] = {
                         "section": ui_field,
                         "status": "PASS",

@@ -44,7 +44,7 @@ def validate_payload(dom_data: dict, pdf_bytes: bytes) -> dict:
     except Exception as e:
         import logging
         logging.getLogger("validator_backend").error(f"Excel validation failed: {e}")
-        excel_results = {}
+        excel_results = {"error": str(e)}
         
     flat_dom_lower = {k.lower(): k for k in flat_dom.keys()}
     requested_general_fields_lower = [f.lower() for f in requested_general_fields]
