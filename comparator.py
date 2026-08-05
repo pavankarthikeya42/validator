@@ -22,6 +22,7 @@ from section_matcher import (
 
 class FieldStatus(str, Enum):
     MATCH = "MATCH"
+    PARTIAL = "PARTIAL"           # matched heading, only part of the text found
     MISMATCH = "MISMATCH"
     MISSING_IN_PDF = "MISSING_IN_PDF"
     MISSING_IN_UI = "MISSING_IN_UI"
@@ -37,6 +38,7 @@ class FieldResult:
     normalised_ui: Optional[str] = None
     normalised_pdf: Optional[str] = None
     screenshot_path: Optional[str] = None
+    similarity: Optional[float] = None
 
 
 @dataclass
@@ -83,6 +85,30 @@ class ComparisonResult:
         return f_mis + t_mis
 
     @property
+    def partials(self) -> int:
+        f_part = sum(1 for f in self.fields if f.status == FieldStatus.PARTIAL)
+        t_part = sum(sum(1 for r in t.row_results if r.status == FieldStatus.PARTIAL) for t in self.tables)
+        return f_part + t_part
+
+    @property
+    def accuracy(self) -> float:
+        """
+        Percentage of the UI's text that was found under the right heading.
+
+        A partially matched block counts for how much of it matched, so a
+        document of near misses does not score the same as a document of
+        outright mismatches.
+        """
+        scored = [f for f in self.fields if f.status != FieldStatus.SKIPPED]
+        if not scored:
+            return 0.0
+        total = sum(
+            1.0 if f.status == FieldStatus.MATCH else (f.similarity or 0.0)
+            for f in scored
+        )
+        return round(100 * total / len(scored), 2)
+
+    @property
     def missing_in_pdf(self) -> int:
         f_miss = sum(1 for f in self.fields if f.status == FieldStatus.MISSING_IN_PDF)
         t_miss = sum(sum(1 for r in t.row_results if r.status == FieldStatus.MISSING_IN_PDF) for t in self.tables)
@@ -106,7 +132,9 @@ class ComparisonResult:
             "doc_index": self.doc_index,
             "fields_validated": self.total_fields,
             "matches": self.matches,
+            "partials": self.partials,
             "mismatches": self.mismatches,
+            "accuracy": self.accuracy,
             "missing_in_pdf": self.missing_in_pdf,
             "missing_in_ui": self.missing_in_ui,
             "error": self.error,
@@ -117,6 +145,7 @@ class ComparisonResult:
                     "ui_value": f.ui_value,
                     "pdf_value": f.pdf_value,
                     "status": f.status.value,
+                    "similarity": f.similarity,
                     "screenshot": f.screenshot_path,
                 }
                 for f in self.fields
@@ -161,6 +190,9 @@ class Comparator:
         self._threshold: float = float(validation.get("match_threshold", 0.85))
         self._semantic_threshold: float = float(
             validation.get("semantic_threshold", 0.75)
+        )
+        self._partial_threshold: float = float(
+            validation.get("partial_threshold", 0.6)
         )
         self._skip_values: list[str] = [
             s.lower() for s in validation.get(
@@ -217,6 +249,7 @@ class Comparator:
                 pdf_blocks=pdf_blocks,
                 pdf_raw=pdf_raw,
                 threshold=self._semantic_threshold if semantic else self._threshold,
+                partial_threshold=self._partial_threshold,
                 semantic=semantic,
                 matcher=self._semantic,
             )
@@ -230,6 +263,7 @@ class Comparator:
                         status=FieldStatus(block.status),
                         normalised_ui=f"similarity={block.similarity:.2f}",
                         normalised_pdf="semantic" if block.semantic else "literal",
+                        similarity=round(block.similarity, 4),
                     )
                 )
 

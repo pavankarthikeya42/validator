@@ -473,8 +473,16 @@
         <div class="__dv_stat_lbl__">Matches</div>
       </div>
       <div class="__dv_stat__">
+        <div id="__dv_s_partial__" class="__dv_stat_val__ yellow">—</div>
+        <div class="__dv_stat_lbl__">Partial</div>
+      </div>
+      <div class="__dv_stat__">
         <div id="__dv_s_mismatch__" class="__dv_stat_val__ red">—</div>
         <div class="__dv_stat_lbl__">Mismatches</div>
+      </div>
+      <div class="__dv_stat__">
+        <div id="__dv_s_accuracy__" class="__dv_stat_val__ blue">—</div>
+        <div class="__dv_stat_lbl__">Accuracy</div>
       </div>
     </div>
 
@@ -637,7 +645,9 @@
     $("__dv_s_docs__").textContent    = data.completed ?? "—";
     $("__dv_s_fields__").textContent  = data.fields_validated ?? "—";
     $("__dv_s_match__").textContent   = data.matches ?? "—";
+    $("__dv_s_partial__").textContent = data.partials ?? "—";
     $("__dv_s_mismatch__").textContent= data.mismatches ?? "—";
+    $("__dv_s_accuracy__").textContent= data.accuracy != null ? `${data.accuracy}%` : "—";
 
     // Buttons
     const running  = status === "RUNNING";

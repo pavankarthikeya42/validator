@@ -219,6 +219,7 @@ Used automatically when `field_mappings` is empty.
 validation:
   section_matching: true
   match_threshold: 0.85
+  partial_threshold: 0.6
   semantic_threshold: 0.75
   semantic_model: "all-MiniLM-L6-v2"
   semantic_sections:
@@ -232,6 +233,10 @@ it are compared. Any further numbered heading inside the same section (e.g.
 `2.3 Executive Summary`) is anchored and compared as its own block. A heading the
 UI shows but the PDF lacks is `MISSING_IN_PDF`; a PDF heading no UI section
 claimed is `MISSING_IN_UI`.
+
+A block scoring below `match_threshold` but at or above `partial_threshold` is
+`PARTIAL` — the right heading with only part of its text found. Reports carry an
+overall accuracy where a `PARTIAL` block counts for how much of it matched.
 
 Sections named in `semantic_sections` skip heading anchoring and are compared by
 meaning using local embeddings (`pip install sentence-transformers`; the model

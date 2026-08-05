@@ -199,6 +199,7 @@ async def validate_document(
     return {
         "fields_validated": result.total_fields,
         "matches": result.matches,
+        "partials": result.partials,
         "mismatches": result.mismatches,
         "missing": result.missing_in_pdf + result.missing_in_ui,
     }
@@ -400,7 +401,9 @@ def _print_final_summary(summary: dict, config: dict) -> None:
 [cyan]Total Documents:[/cyan]    {summary['total_documents_processed']}
 [green]Fields Validated:[/green]  {summary['total_fields_validated']}
 [green]Matches:[/green]           {summary['total_matches']}
+[yellow]Partial:[/yellow]           {summary['total_partials']}
 [red]Mismatches:[/red]         {summary['total_mismatches']}
+[cyan]Accuracy:[/cyan]          {summary['overall_accuracy']}%
 [yellow]Missing Fields:[/yellow]    {summary['total_missing_fields']}
 [red]Failed Docs:[/red]        {summary['total_failed_documents']}
 [blue]Duration:[/blue]           {summary['processing_time_human']}

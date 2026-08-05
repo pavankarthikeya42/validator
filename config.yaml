@@ -216,6 +216,7 @@ table_mappings:
 validation:
   section_matching: true
   match_threshold: 0.85          # literal block similarity required for MATCH
+  partial_threshold: 0.6         # below MATCH but at or above this is PARTIAL
   semantic_threshold: 0.75       # cosine similarity required for MATCH
   semantic_model: "all-MiniLM-L6-v2"
   # Sections compared by meaning rather than heading-anchored text

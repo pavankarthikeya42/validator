@@ -26,6 +26,7 @@ from state import RunState
 # Status → hex background for HTML/Excel
 STATUS_COLORS = {
     FieldStatus.MATCH: "#d4edda",
+    FieldStatus.PARTIAL: "#ffeeba",
     FieldStatus.MISMATCH: "#f8d7da",
     FieldStatus.MISSING_IN_PDF: "#fff3cd",
     FieldStatus.MISSING_IN_UI: "#d1ecf1",
@@ -34,6 +35,7 @@ STATUS_COLORS = {
 
 EXCEL_FILLS = {
     FieldStatus.MATCH: "D4EDDA",
+    FieldStatus.PARTIAL: "FFEEBA",
     FieldStatus.MISMATCH: "F8D7DA",
     FieldStatus.MISSING_IN_PDF: "FFF3CD",
     FieldStatus.MISSING_IN_UI: "D1ECF1",
@@ -79,7 +81,12 @@ class Reporter:
         failed = sum(1 for r in self._results if r.error)
         total_fields = sum(r.total_fields for r in self._results)
         total_matches = sum(r.matches for r in self._results)
+        total_partials = sum(r.partials for r in self._results)
         total_mismatches = sum(r.mismatches for r in self._results)
+        accuracy = (
+            round(sum(r.accuracy for r in self._results) / len(self._results), 2)
+            if self._results else 0.0
+        )
         total_missing = sum(r.missing_in_pdf + r.missing_in_ui for r in self._results)
         elapsed = self.state.elapsed_seconds()
         success_rate = (
@@ -89,7 +96,9 @@ class Reporter:
             "total_documents_processed": total_docs,
             "total_fields_validated": total_fields,
             "total_matches": total_matches,
+            "total_partials": total_partials,
             "total_mismatches": total_mismatches,
+            "overall_accuracy": accuracy,
             "total_missing_fields": total_missing,
             "total_failed_documents": failed,
             "processing_time_seconds": round(elapsed, 1),
@@ -253,6 +262,7 @@ class Reporter:
         for result in self._results:
             for fr in result.fields:
                 if fr.status in (
+                    FieldStatus.PARTIAL,
                     FieldStatus.MISMATCH,
                     FieldStatus.MISSING_IN_PDF,
                     FieldStatus.MISSING_IN_UI,

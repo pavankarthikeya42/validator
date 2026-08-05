@@ -58,7 +58,7 @@ class Block:
 @dataclass
 class BlockResult:
     heading: str
-    status: str                 # MATCH | MISMATCH | MISSING_IN_PDF | MISSING_IN_UI
+    status: str                 # MATCH | PARTIAL | MISMATCH | MISSING_IN_PDF | MISSING_IN_UI
     ui_text: str
     pdf_text: str
     similarity: float = 0.0
@@ -367,6 +367,13 @@ def _candidates(text: str) -> list[str]:
 # Validation
 # ----------------------------------------------------------------------
 
+def _status(score: float, threshold: float, partial_threshold: float) -> str:
+    """MATCH, or PARTIAL when only some of the UI text was found."""
+    if score >= threshold:
+        return "MATCH"
+    return "PARTIAL" if score >= partial_threshold else "MISMATCH"
+
+
 def _find_pdf_block(ui_block: Block, pdf_blocks: list[Block]) -> Optional[Block]:
     """Anchor on the heading number first, then on the heading title."""
     for pdf_block in pdf_blocks:
@@ -385,6 +392,7 @@ def validate_section(
     pdf_blocks: list[Block],
     pdf_raw: str,
     threshold: float,
+    partial_threshold: float = 0.6,
     semantic: bool = False,
     matcher: Optional[SemanticMatcher] = None,
 ) -> SectionResult:
@@ -399,7 +407,7 @@ def validate_section(
             result.blocks.append(
                 BlockResult(
                     heading=section,
-                    status="MATCH" if score >= threshold else "MISMATCH",
+                    status=_status(score, threshold, partial_threshold),
                     ui_text=line,
                     pdf_text=best,
                     similarity=score,
@@ -415,7 +423,10 @@ def validate_section(
         result.blocks.append(
             BlockResult(
                 heading=section,
-                status="MATCH" if score >= threshold else "MISSING_IN_PDF",
+                status=(
+                    _status(score, threshold, partial_threshold)
+                    if score >= partial_threshold else "MISSING_IN_PDF"
+                ),
                 ui_text=ui_text,
                 pdf_text="",
                 similarity=score,
@@ -461,10 +472,10 @@ def validate_section(
         score = min(heading_score, body_score)
         if not ui_block.body.strip() and pdf_block.body.strip():
             status = "MISSING_IN_UI"
-        elif not pdf_block.body.strip() and score < threshold:
+        elif not pdf_block.body.strip() and score < partial_threshold:
             status = "MISSING_IN_PDF"
         else:
-            status = "MATCH" if score >= threshold else "MISMATCH"
+            status = _status(score, threshold, partial_threshold)
         result.blocks.append(
             BlockResult(
                 heading=ui_block.heading,

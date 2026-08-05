@@ -60,6 +60,27 @@ def test_section_absent_from_ui_is_reported_against_the_pdf():
     assert statuses["2 Therapeutic Context"] == FieldStatus.MISSING_IN_UI
 
 
+PARTIAL_UI = REAL_UI.replace(
+    "VTAMA cream", "VTAMA foam and an accompanying pediatric study plan"
+)
+
+
+def test_block_with_only_part_of_its_text_in_the_pdf_is_partial():
+    res = validate_section(
+        "Summary", PARTIAL_UI, parse_pdf_blocks(REAL_PDF), REAL_PDF, 0.85, 0.6
+    )
+    product = next(b for b in res.blocks if b.heading.startswith("1.1"))
+    assert product.status == "PARTIAL"
+    assert 0.6 <= product.similarity < 0.85
+
+
+def test_accuracy_counts_a_partial_block_for_what_matched():
+    cmp = Comparator({"validation": {"semantic_sections": []}})
+    res = cmp.compare("doc", 0, {"Summary > Content": PARTIAL_UI}, {"__raw__": REAL_PDF})
+    assert res.partials == 1
+    assert 0 < res.accuracy < 100
+
+
 def test_placeholder_sections_are_skipped():
     cmp = Comparator({"validation": {"semantic_sections": []}})
     ui = {"Filing Checklist > Content": "No data available for this section"}
@@ -122,10 +143,10 @@ def test_section_with_nested_heading_validates_both_blocks():
     assert all(b.status == "MATCH" for b in res.blocks)
 
 
-def test_body_under_correct_heading_but_wrong_text_is_mismatch():
+def test_body_under_correct_heading_but_wrong_text_is_not_a_match():
     ui = "1. Executive Summary The product showed an unfavourable profile in all studies."
     res = validate_section("Executive Summary", ui, parse_blocks(PDF_TEXT), PDF_TEXT, 0.85)
-    assert res.blocks[0].status == "MISMATCH"
+    assert res.blocks[0].status in ("PARTIAL", "MISMATCH")
 
 
 def test_heading_absent_from_pdf_is_missing_in_pdf():
