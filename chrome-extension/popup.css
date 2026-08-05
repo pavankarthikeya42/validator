@@ -277,6 +277,11 @@ header .subtitle {
   color: #991b1b;
 }
 
+.badge.null {
+  background-color: #f1f5f9;
+  color: #475569;
+}
+
 .export-actions {
   display: flex;
   gap: 8px;

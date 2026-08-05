@@ -80,14 +80,14 @@ def validate_payload(dom_data: dict, pdf_bytes: bytes) -> dict:
         status = report["status"]
         if status == "PASS": passed_count += 1
         elif status == "PARTIAL": partial_count += 1
-        else: failed_count += 1
+        elif status == "FAIL": failed_count += 1
         
         metadata_validation[section_name] = {
             "status": status,
-            "similarity": report["similarity"],
+            "similarity": report.get("similarity"),
             "matched_text": report.get("matched_text", []),
             "missing_text": report.get("missing_text", []),
-            "pdf_pages": report["pdf_pages"]
+            "pdf_pages": report.get("pdf_pages", [])
         }
 
     # 3b. Validate Dynamic Sections against PDF (supports EPAR dynamically)
@@ -103,12 +103,12 @@ def validate_payload(dom_data: dict, pdf_bytes: bytes) -> dict:
         status = report["status"]
         if status == "PASS": passed_count += 1
         elif status == "PARTIAL": partial_count += 1
-        else: failed_count += 1
+        elif status == "FAIL": failed_count += 1
         
     total_sections = len(flat_dom)
     
     # Overall Accuracy is the average similarity score across all validated sections (excluding skipped ones)
-    validated_reports = [r for r in section_reports if not r.get("skipped", False)]
+    validated_reports = [r for r in section_reports if not r.get("skipped", False) and r.get("status") != "NULL" and r.get("similarity") is not None]
     overall_accuracy = (
         sum(r["similarity"] for r in validated_reports) / len(validated_reports)
         if len(validated_reports) > 0 else 100.0

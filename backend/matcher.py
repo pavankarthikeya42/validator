@@ -119,8 +119,8 @@ def match_section(section_name: str, ui_text: str, pdf_blocks: list) -> dict:
     if not norm_ui_text or is_none_or_na:
         return {
             "section": section_name,
-            "similarity": 100.0,
-            "status": "PARTIAL",
+            "similarity": None,
+            "status": "NULL",
             "matched_text": [],
             "missing_text": [ui_text.strip() if ui_text.strip() else "No data provided in UI"],
             "pdf_pages": [],

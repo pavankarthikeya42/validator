@@ -255,7 +255,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const badgeSpan = document.createElement('span');
       badgeSpan.className = `badge ${sec.status.toLowerCase()}`;
-      badgeSpan.textContent = `${sec.status} (${sec.similarity}%)`;
+      if (sec.status === 'NULL') {
+        badgeSpan.textContent = `NULL`;
+      } else {
+        badgeSpan.textContent = `${sec.status} (${sec.similarity}%)`;
+      }
 
       item.appendChild(nameDiv);
       item.appendChild(badgeSpan);

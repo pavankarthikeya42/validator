@@ -88,8 +88,8 @@ class ExcelValidator:
                 if is_none_or_na and is_excel_empty:
                     results[ui_field] = {
                         "section": ui_field,
-                        "status": "PARTIAL",
-                        "similarity": 100.0,
+                        "status": "NULL",
+                        "similarity": None,
                         "matched_text": [],
                         "missing_text": ["No data provided in UI or Excel"],
                         "pdf_pages": ["Excel"],
