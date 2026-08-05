@@ -8,7 +8,7 @@ class ExcelValidator:
         
     def load(self):
         if self.df is None:
-            self.df = pd.read_excel(self.excel_path)
+            self.df = pd.read_excel(self.excel_path, skiprows=8)
             # Ensure columns are string for easier comparison
             self.df.columns = [str(c).strip() for c in self.df.columns]
             
@@ -34,10 +34,10 @@ class ExcelValidator:
         # Find row by International non-proprietary name (INN) or Medicine name
         matched_row = None
         for idx, row in self.df.iterrows():
-            inn = str(row.get("International non-proprietary name (INN) / common name", "")).lower()
-            med_name = str(row.get("Medicine name", "")).lower()
+            inn = str(row.get("International non-proprietary name (INN) / common name", "")).lower().strip()
+            med_name = str(row.get("Medicine name", "")).lower().strip()
             
-            if search_value in inn or search_value in med_name or inn in search_value or med_name in search_value:
+            if search_value in inn or search_value in med_name or (inn and inn in search_value) or (med_name and med_name in search_value):
                 matched_row = row
                 break
                 
