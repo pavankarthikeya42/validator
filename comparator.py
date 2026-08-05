@@ -12,9 +12,17 @@ from enum import Enum
 import math
 from typing import Optional
 
+from section_matcher import (
+    SemanticMatcher,
+    parse_pdf_blocks,
+    unmatched_pdf_blocks,
+    validate_section,
+)
+
 
 class FieldStatus(str, Enum):
     MATCH = "MATCH"
+    PARTIAL = "PARTIAL"           # matched heading, only part of the text found
     MISMATCH = "MISMATCH"
     MISSING_IN_PDF = "MISSING_IN_PDF"
     MISSING_IN_UI = "MISSING_IN_UI"
@@ -30,6 +38,7 @@ class FieldResult:
     normalised_ui: Optional[str] = None
     normalised_pdf: Optional[str] = None
     screenshot_path: Optional[str] = None
+    similarity: Optional[float] = None
 
 
 @dataclass
@@ -76,6 +85,30 @@ class ComparisonResult:
         return f_mis + t_mis
 
     @property
+    def partials(self) -> int:
+        f_part = sum(1 for f in self.fields if f.status == FieldStatus.PARTIAL)
+        t_part = sum(sum(1 for r in t.row_results if r.status == FieldStatus.PARTIAL) for t in self.tables)
+        return f_part + t_part
+
+    @property
+    def accuracy(self) -> float:
+        """
+        Percentage of the UI's text that was found under the right heading.
+
+        A partially matched block counts for how much of it matched, so a
+        document of near misses does not score the same as a document of
+        outright mismatches.
+        """
+        scored = [f for f in self.fields if f.status != FieldStatus.SKIPPED]
+        if not scored:
+            return 0.0
+        total = sum(
+            1.0 if f.status == FieldStatus.MATCH else (f.similarity or 0.0)
+            for f in scored
+        )
+        return round(100 * total / len(scored), 2)
+
+    @property
     def missing_in_pdf(self) -> int:
         f_miss = sum(1 for f in self.fields if f.status == FieldStatus.MISSING_IN_PDF)
         t_miss = sum(sum(1 for r in t.row_results if r.status == FieldStatus.MISSING_IN_PDF) for t in self.tables)
@@ -99,7 +132,9 @@ class ComparisonResult:
             "doc_index": self.doc_index,
             "fields_validated": self.total_fields,
             "matches": self.matches,
+            "partials": self.partials,
             "mismatches": self.mismatches,
+            "accuracy": self.accuracy,
             "missing_in_pdf": self.missing_in_pdf,
             "missing_in_ui": self.missing_in_ui,
             "error": self.error,
@@ -110,6 +145,7 @@ class ComparisonResult:
                     "ui_value": f.ui_value,
                     "pdf_value": f.pdf_value,
                     "status": f.status.value,
+                    "similarity": f.similarity,
                     "screenshot": f.screenshot_path,
                 }
                 for f in self.fields
@@ -149,6 +185,100 @@ class Comparator:
         self.cfg = config
         self._mappings: list[dict] = config.get("field_mappings", [])
 
+        validation = config.get("validation") or {}
+        self._section_validation: bool = validation.get("section_matching", True)
+        self._threshold: float = float(validation.get("match_threshold", 0.85))
+        self._semantic_threshold: float = float(
+            validation.get("semantic_threshold", 0.75)
+        )
+        self._partial_threshold: float = float(
+            validation.get("partial_threshold", 0.6)
+        )
+        self._skip_values: list[str] = [
+            s.lower() for s in validation.get(
+                "skip_ui_values", ["No data available for this section"]
+            )
+        ]
+        self._semantic_sections: list[str] = [
+            s.lower() for s in validation.get("semantic_sections", ["Metadata", "Indication"])
+        ]
+        self._semantic = SemanticMatcher(
+            validation.get("semantic_model", "all-MiniLM-L6-v2")
+        )
+
+    def _is_semantic(self, section: str) -> bool:
+        name = section.lower()
+        return any(s in name for s in self._semantic_sections)
+
+    def compare_sections(
+        self, doc_id: str, doc_index: int, ui_data: dict[str, str], pdf_raw: str
+    ) -> ComparisonResult:
+        """
+        Heading-anchored validation.
+
+        Each UI section is anchored to the PDF by the heading it starts with,
+        and only the text under that heading is compared. Sections listed in
+        `validation.semantic_sections` are compared by meaning instead.
+        """
+        result = ComparisonResult(doc_id=doc_id, doc_index=doc_index)
+        pdf_blocks = parse_pdf_blocks(pdf_raw)
+        section_results = []
+
+        grouped: dict[str, list[str]] = {}
+        for ui_path, ui_val in ui_data.items():
+            if ui_path.startswith("__") or not (ui_val or "").strip():
+                continue
+            grouped.setdefault(ui_path.split(">")[0].strip(), []).append(ui_val.strip())
+
+        for section, values in grouped.items():
+            ui_val = "\n".join(values)
+            if ui_val.strip().lower() in self._skip_values:
+                result.fields.append(
+                    FieldResult(
+                        field_path=section,
+                        ui_value=ui_val,
+                        pdf_value=None,
+                        status=FieldStatus.SKIPPED,
+                    )
+                )
+                continue
+            semantic = self._is_semantic(section)
+            section_res = validate_section(
+                section=section,
+                ui_text=ui_val,
+                pdf_blocks=pdf_blocks,
+                pdf_raw=pdf_raw,
+                threshold=self._semantic_threshold if semantic else self._threshold,
+                partial_threshold=self._partial_threshold,
+                semantic=semantic,
+                matcher=self._semantic,
+            )
+            section_results.append(section_res)
+            for block in section_res.blocks:
+                result.fields.append(
+                    FieldResult(
+                        field_path=f"{section} > {block.heading}",
+                        ui_value=block.ui_text,
+                        pdf_value=block.pdf_text or None,
+                        status=FieldStatus(block.status),
+                        normalised_ui=f"similarity={block.similarity:.2f}",
+                        normalised_pdf="semantic" if block.semantic else "literal",
+                        similarity=round(block.similarity, 4),
+                    )
+                )
+
+        for block in unmatched_pdf_blocks(pdf_blocks, section_results):
+            result.fields.append(
+                FieldResult(
+                    field_path=block.heading,
+                    ui_value=None,
+                    pdf_value=block.body,
+                    status=FieldStatus.MISSING_IN_UI,
+                )
+            )
+
+        return result
+
     def compare(
         self,
         doc_id: str,
@@ -158,8 +288,13 @@ class Comparator:
         ui_tables: list[dict] = None,
         pdf_tables: list[list[list[str]]] = None,
     ) -> ComparisonResult:
+        if self._section_validation and not self._mappings:
+            raw = pdf_data.get("__raw__", "")
+            if raw:
+                return self.compare_sections(doc_id, doc_index, ui_data, raw)
+
         result = ComparisonResult(doc_id=doc_id, doc_index=doc_index)
-        
+
         ui_tables = ui_tables or []
         pdf_tables = pdf_tables or []
 
