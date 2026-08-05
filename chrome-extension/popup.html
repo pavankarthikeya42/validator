@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Karthera PDF Validator</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+  <div class="container">
+    <header>
+      <h1>Karthera Validator</h1>
+      <p class="subtitle">FDA PDF Verification System</p>
+    </header>
+
+    <div class="card">
+      <div class="upload-area" id="upload-area">
+        <input type="file" id="pdf-upload" accept="application/pdf" hidden>
+        <label for="pdf-upload" class="upload-btn">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+          </svg>
+          Select FDA PDF
+        </label>
+        <div id="file-name" class="file-name">No file selected</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="form-group">
+        <label for="custom-filename" class="form-label">Custom JSON Filename</label>
+        <input type="text" id="custom-filename" placeholder="e.g. POSLUMA_Blue_Earth_Diagnostics_Ltd" class="form-input">
+      </div>
+    </div>
+
+
+    <div class="actions">
+      <button id="btn-validate" class="btn btn-primary">Validate Data</button>
+      <button id="btn-extract" class="btn btn-secondary">Extract Data</button>
+    </div>
+
+    <div id="progress-container" class="progress-container hidden">
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <div id="progress-text" class="progress-text">Ready...</div>
+    </div>
+
+    <div id="results-area" class="results-area hidden">
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-value" id="stat-accuracy">0%</div>
+          <div class="stat-label">Accuracy</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value pass" id="stat-passed">0</div>
+          <div class="stat-label">Passed</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value partial" id="stat-partial">0</div>
+          <div class="stat-label">Partial</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value fail" id="stat-failed">0</div>
+          <div class="stat-label">Failed</div>
+        </div>
+      </div>
+
+      <div class="results-breakdown">
+        <h3>Section Verification Breakdown</h3>
+        <div id="breakdown-list" class="breakdown-list">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <div class="export-actions">
+        <button id="btn-export-html" class="btn btn-outline">Export HTML</button>
+        <button id="btn-export-csv" class="btn btn-outline">Export CSV</button>
+        <button id="btn-export-json" class="btn btn-outline">Export JSON</button>
+      </div>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+
+</html>
