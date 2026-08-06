@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Karthera PDF Validator",
+  "name": "Karithera Validator",
   "version": "1.0.0",
   "description": "Validates live Karthera application data against FDA review PDFs using FastAPI backend.",
   "permissions": [

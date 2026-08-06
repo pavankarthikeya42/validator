@@ -56,7 +56,7 @@ Ensure you have Python 3.12+ installed.
 
 1. Open the Karthera application, and navigate to any comparison page.
 2. Ensure you have expanded the sections you wish to validate.
-3. Open the **Karthera PDF Validator** extension from your browser toolbar.
+3. Open the **Karithera Validator** extension from your browser toolbar.
 4. Upload the FDA review PDF corresponding to the comparison data.
 5. Click the **Validate Data** button.
 6. The extension will read the visible DOM, package it with the PDF, validate it against the backend, and present a detailed breakdown of PASS, PARTIAL, and FAIL sections.
