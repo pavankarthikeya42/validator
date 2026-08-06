@@ -1,6 +1,6 @@
-# Karthera Validator Backend & Chrome Extension
+# Karithera Validator Backend & Chrome Extension
 
-A production-ready Chrome Extension (Manifest V3) with a Python FastAPI backend for validating data displayed in the live Karthera application against a user-uploaded PDF.
+A production-ready Chrome Extension (Manifest V3) with a Python FastAPI backend for validating data displayed in the live Karithera application against a user-uploaded PDF.
 
 ## Project Structure
 
@@ -54,7 +54,7 @@ Ensure you have Python 3.12+ installed.
 
 ### 3. Usage Workflow
 
-1. Open the Karthera application, and navigate to any comparison page.
+1. Open the Karithera application, and navigate to any comparison page.
 2. Ensure you have expanded the sections you wish to validate.
 3. Open the **Karithera Validator** extension from your browser toolbar.
 4. Upload the FDA review PDF corresponding to the comparison data.

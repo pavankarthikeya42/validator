@@ -1,6 +1,6 @@
-# Karthera Zero-Touch Validation System
+# Karithera Zero-Touch Validation System
 
-A comprehensive Chrome Extension (Manifest V3) and Python FastAPI backend pipeline built for automating the validation of Clinical and EPAR data displayed in the live Karthera application.
+A comprehensive Chrome Extension (Manifest V3) and Python FastAPI backend pipeline built for automating the validation of Clinical and EPAR data displayed in the live Karithera application.
 
 The system performs "Zero-Touch" background validation: it intercepts the target document directly from the web application, scrapes the visible UI data, and cross-references everything against both an offline Excel database and the extracted text of the source PDF.
 
@@ -11,8 +11,8 @@ The system performs "Zero-Touch" background validation: it intercepts the target
 The architecture is split into a frontend Chrome Extension and a local FastAPI backend.
 
 ### 1. Data Extraction (Frontend)
-1. **DOM Scraping (`content.js`)**: Injects into the Karthera comparison page. It extracts metadata from the top table (e.g., Generic Name, Application #) and dynamically extracts the numbered accordion sections (e.g., "1. Executive Summary", "2. Regulatory Background").
-2. **Zero-Touch Document Interception (`inject.js`)**: Bypasses strict Content Security Policies (CSP) by injecting directly into the execution environment. It hooks `window.open` and XHR to silently intercept the PDF blob when the Karthera UI attempts to open the document in a new tab. This enables background validation without user friction.
+1. **DOM Scraping (`content.js`)**: Injects into the Karithera comparison page. It extracts metadata from the top table (e.g., Generic Name, Application #) and dynamically extracts the numbered accordion sections (e.g., "1. Executive Summary", "2. Regulatory Background").
+2. **Zero-Touch Document Interception (`inject.js`)**: Bypasses strict Content Security Policies (CSP) by injecting directly into the execution environment. It hooks `window.open` and XHR to silently intercept the PDF blob when the Karithera UI attempts to open the document in a new tab. This enables background validation without user friction.
 3. **Orchestration (`popup.js`)**: Packages the scraped UI dictionary and the intercepted PDF Blob into a multipart form request and ships it to the local FastAPI backend.
 
 ### 2. Validation Engine (Backend)
@@ -29,7 +29,7 @@ General Information fields (e.g., *Generic Name, Marketing Authorisation Holder,
 Numbered sections containing unstructured clinical text are routed to the PDF `matcher.py`.
 - **Text Extraction (`pdf_parser.py`)**: Uses `PyMuPDF` (`fitz`) to extract all text blocks. (Note: Images are skipped entirely, and tables are flattened into raw text blocks).
 - **Heading Anchoring**: The parser heuristically tags text blocks to their closest preceding heading (e.g., "1. Executive Summary") to establish localized context.
-- **Fuzzy Matching (`matcher.py`)**: The engine uses `thefuzz` (Levenshtein distance) to perform partial string matching. It hunts for the extracted Karthera UI text inside the targeted PDF text blocks.
+- **Fuzzy Matching (`matcher.py`)**: The engine uses `thefuzz` (Levenshtein distance) to perform partial string matching. It hunts for the extracted Karithera UI text inside the targeted PDF text blocks.
 - If the match confidence exceeds 95%, it passes. Otherwise, it flags the missing chunks as `FAIL` or `PARTIAL`. Empty placeholders like *"No data available for this section"* are caught and flagged as `NULL`.
 
 ### 3. Reporting
@@ -92,7 +92,7 @@ Once the pipeline finishes, the results are returned to the Chrome Extension:
 
 ### 3. Usage
 
-1. Open a document comparison page on Karthera.
+1. Open a document comparison page on Karithera.
 2. Click the document to trigger the PDF download. The `inject.js` script will silently intercept the blob in the background without opening a new tab.
 3. Open the **Karthera Validator** extension from your Chrome toolbar.
 4. Click **Validate Data**.
