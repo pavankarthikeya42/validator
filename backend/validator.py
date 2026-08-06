@@ -32,9 +32,13 @@ def validate_payload(dom_data: dict, pdf_bytes: bytes) -> dict:
     section_reports = []
     metadata_validation = {}
     
-    passed_count = 0
-    partial_count = 0
-    failed_count = 0
+    meta_passed_count = 0
+    meta_partial_count = 0
+    meta_failed_count = 0
+    
+    sec_passed_count = 0
+    sec_partial_count = 0
+    sec_failed_count = 0
     
     # 3a. Validate Metadata against Excel
     try:
@@ -77,10 +81,10 @@ def validate_payload(dom_data: dict, pdf_bytes: bytes) -> dict:
             }
             
         section_reports.append(report)
-        status = report["status"]
-        if status == "PASS": passed_count += 1
-        elif status == "PARTIAL": partial_count += 1
-        elif status == "FAIL": failed_count += 1
+        status = report.get("status", "NULL")
+        if status == "PASS": meta_passed_count += 1
+        elif status == "PARTIAL": meta_partial_count += 1
+        elif status == "FAIL": meta_failed_count += 1
         
         metadata_validation[section_name] = {
             "status": status,
@@ -100,29 +104,48 @@ def validate_payload(dom_data: dict, pdf_bytes: bytes) -> dict:
         section_reports.append(report)
         dynamic_reports.append(report)
         
-        status = report["status"]
-        if status == "PASS": passed_count += 1
-        elif status == "PARTIAL": partial_count += 1
-        elif status == "FAIL": failed_count += 1
+        status = report.get("status", "NULL")
+        if status == "PASS": sec_passed_count += 1
+        elif status == "PARTIAL": sec_partial_count += 1
+        elif status == "FAIL": sec_failed_count += 1
         
-    total_sections = len(flat_dom)
+    # Calculate separate accuracies
+    meta_validated = [r for r in section_reports[:len(present_metadata_fields)] if not r.get("skipped", False) and r.get("status") != "NULL" and r.get("similarity") is not None]
+    meta_accuracy = (
+        sum(r["similarity"] for r in meta_validated) / len(meta_validated)
+        if len(meta_validated) > 0 else 100.0
+    )
     
-    # Overall Accuracy is the average similarity score across all validated sections (excluding skipped ones)
-    validated_reports = [r for r in section_reports if not r.get("skipped", False) and r.get("status") != "NULL" and r.get("similarity") is not None]
-    overall_accuracy = (
-        sum(r["similarity"] for r in validated_reports) / len(validated_reports)
-        if len(validated_reports) > 0 else 100.0
+    sec_validated = [r for r in dynamic_reports if not r.get("skipped", False) and r.get("status") != "NULL" and r.get("similarity") is not None]
+    sec_accuracy = (
+        sum(r["similarity"] for r in sec_validated) / len(sec_validated)
+        if len(sec_validated) > 0 else 100.0
     )
 
     processing_time = time.time() - start_time
     
     return {
         "summary": {
-            "total_sections": total_sections,
-            "passed": passed_count,
-            "partial": partial_count,
-            "failed": failed_count,
-            "overall_accuracy": round(overall_accuracy, 2),
+            "metadata": {
+                "total": len(present_metadata_fields),
+                "passed": meta_passed_count,
+                "partial": meta_partial_count,
+                "failed": meta_failed_count,
+                "accuracy": round(meta_accuracy, 2)
+            },
+            "sections": {
+                "total": len(dynamic_sections),
+                "passed": sec_passed_count,
+                "partial": sec_partial_count,
+                "failed": sec_failed_count,
+                "accuracy": round(sec_accuracy, 2)
+            },
+            # Top-level fields prioritized for sections only (maintains report compatibility)
+            "total_sections": len(dynamic_sections),
+            "passed": sec_passed_count,
+            "partial": sec_partial_count,
+            "failed": sec_failed_count,
+            "overall_accuracy": round(sec_accuracy, 2),
             "processing_time_seconds": round(processing_time, 3)
         },
         "metadata_validation": metadata_validation,
