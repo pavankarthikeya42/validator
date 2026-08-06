@@ -223,7 +223,7 @@ def match_section(section_name: str, ui_text: str, pdf_blocks: list) -> dict:
     
     if similarity >= 85.0:
         status = "PASS"
-    elif similarity >= 60.0:
+    elif similarity >= 20.0:
         status = "PARTIAL"
     else:
         status = "FAIL"
