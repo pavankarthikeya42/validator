@@ -9,7 +9,6 @@ class ExcelValidator:
     def load(self):
         if self.df is None:
             self.df = pd.read_excel(self.excel_path, skiprows=8)
-            # Ensure columns are string for easier comparison
             self.df.columns = [str(c).strip() for c in self.df.columns]
             
     def validate_metadata(self, ui_data: Dict[str, str]) -> Dict[str, dict]:
@@ -20,10 +19,8 @@ class ExcelValidator:
         self.load()
         results = {}
         
-        # 1. Identify the search key
         search_value = ui_data.get("Generic Name") or ui_data.get("Review Name") or ui_data.get("Product Name")
         if not search_value:
-            # Fall back to trying to match by some standard
             search_value = ui_data.get("Application #")
             
         if not search_value:
@@ -31,7 +28,6 @@ class ExcelValidator:
             
         search_value = str(search_value).strip().lower()
         
-        # Find row by International non-proprietary name (INN) or Medicine name
         matched_row = None
         for idx, row in self.df.iterrows():
             inn = str(row.get("International non-proprietary name (INN) / common name", "")).lower().strip()
@@ -42,7 +38,6 @@ class ExcelValidator:
                 break
                 
         if matched_row is None:
-            # Check by authorization number if available
             app_num = str(ui_data.get("Application #", "")).lower()
             if app_num:
                 for idx, row in self.df.iterrows():
@@ -54,14 +49,13 @@ class ExcelValidator:
         if matched_row is None:
             return {"error": f"Could not find any row in Excel matching {search_value}"}
             
-        # Field Mappings: UI Field -> Excel Column
         field_mappings = {
             "Generic Name": "International non-proprietary name (INN) / common name",
             "Review Name": "Name of medicine",
             "Product Name": "Name of medicine",
             "Therapeutic Areas": "Therapeutic area (MeSH)",
             "Pharmacologic Class": "Pharmacotherapeutic group\n(human)",
-            "Dosage Form": "Pharmaceutical form", # Does not exist, will skip
+            "Dosage Form": "Pharmaceutical form", 
             "Marketing Authorisation Holder": "Marketing authorisation developer / applicant / holder",
             "Date Of First Authorisation": "Marketing authorisation date",
             "Date Of Revision": "Last updated date",
@@ -69,9 +63,8 @@ class ExcelValidator:
             "Revised Date": "Last updated date",
             "Outcome": "Medicine status",
             "Approval Type": "Conditional approval",
-            "Variations": "Condition / obligation" # Does not exist, will skip
+            "Variations": "Condition / obligation" 
         }
-        # Create a case-insensitive lookup dict for ui_data
         ui_data_lower = {k.lower(): v for k, v in ui_data.items()}
         
         for ui_field, excel_col in field_mappings.items():
@@ -84,7 +77,6 @@ class ExcelValidator:
                 excel_val = str(matched_row.get(excel_col, "")).strip().lower()
                 is_excel_empty = not excel_val or excel_val == "nan"
                 
-                # If both are empty, it's a PASS (or PARTIAL to indicate placeholder)
                 if is_none_or_na and is_excel_empty:
                     results[ui_field] = {
                         "section": ui_field,
@@ -95,7 +87,6 @@ class ExcelValidator:
                         "pdf_pages": ["Excel"],
                         "skipped": False
                     }
-                # If UI is empty but Excel has data, it's a FAIL
                 elif is_none_or_na and not is_excel_empty:
                     results[ui_field] = {
                         "section": ui_field,
@@ -106,7 +97,6 @@ class ExcelValidator:
                         "pdf_pages": ["Excel"],
                         "skipped": False
                     }
-                # Check for match
                 elif ui_val in excel_val or excel_val in ui_val:
                     results[ui_field] = {
                         "section": ui_field,

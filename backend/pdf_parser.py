@@ -5,10 +5,8 @@ import re
 def is_heading(text: str) -> bool:
     """Heuristic to determine if a text block is a heading based strictly on text matching."""
     clean_text = text.strip()
-    # Numbered heading e.g., "1. Executive Summary" or "2.3. Overview"
     if re.match(r'^(\d+\.)+\s+[A-Za-z]', clean_text) or re.match(r'^\d+\s+[A-Za-z]', clean_text):
         return True
-    # All caps, short
     if clean_text.isupper() and 3 < len(clean_text) < 100:
         return True
     return False
@@ -39,8 +37,7 @@ def extract_pdf_data(pdf_bytes: bytes) -> list:
             top_margin = height * 0.08
             bottom_margin = height * 0.92
             
-            # 1. Extract Text Layout
-            # We use extract_text_lines to get text blocks with bounding boxes
+
             text_lines = page.extract_text_lines()
             if text_lines:
                 for line_obj in text_lines:
@@ -51,7 +48,6 @@ def extract_pdf_data(pdf_bytes: bytes) -> list:
                     if not text:
                         continue
                         
-                    # Filter headers/footers
                     if bottom < top_margin or top > bottom_margin:
                         if re.match(r'^\d+$', text) or \
                            re.match(r'^page\s+\d+(\s+of\s+\d+)?$', text, re.IGNORECASE) or \
@@ -68,8 +64,7 @@ def extract_pdf_data(pdf_bytes: bytes) -> list:
                         "heading": current_heading
                     })
             
-            # 2. Extract Tables
-            # Extract tables exactly as they appear and treat each table as a special block.
+           
             tables = page.extract_tables()
             if tables:
                 for table in tables:

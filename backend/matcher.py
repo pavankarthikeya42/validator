@@ -7,7 +7,6 @@ try:
     import torch
     from torch.nn.functional import cosine_similarity
     
-    # Load model on startup
     semantic_model = SentenceTransformer('all-MiniLM-L6-v2')
 except ImportError:
     semantic_model = None
