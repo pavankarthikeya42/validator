@@ -1,4 +1,4 @@
-import fitz
+import pdfplumber
 import io
 import re
 
@@ -28,51 +28,53 @@ def extract_pdf_data(pdf_bytes: bytes) -> list:
     extracted_blocks = []
     current_heading = "Document Start"
     
-    with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-        for page_idx in range(len(doc)):
-            page = doc[page_idx]
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as doc:
+        for page_idx, page in enumerate(doc.pages):
             page_num = page_idx + 1
-            rect = page.rect
-            height = rect.height
-            width = rect.width
+            height = page.height
+            width = page.width
             
             top_margin = height * 0.08
             bottom_margin = height * 0.92
             
 
-            text_lines = page.get_text("dict").get("blocks", [])
+            text_lines = page.extract_text_lines()
             if text_lines:
-                for block in text_lines:
-                    if block.get("type") != 0:
+                for line_obj in text_lines:
+                    text = line_obj.get("text", "").strip()
+                    top = line_obj.get("top", 0)
+                    bottom = line_obj.get("bottom", height)
+                    
+                    if not text:
                         continue
-                    for line_obj in block.get("lines", []):
-                        text = "".join(span.get("text", "") for span in line_obj.get("spans", [])).strip()
-                        bbox = line_obj.get("bbox", [0, 0, width, height])
-                        top = bbox[1]
-                        bottom = bbox[3]
-
-                        if not text:
+                        
+                    if bottom < top_margin or top > bottom_margin:
+                        if re.match(r'^\d+$', text) or \
+                           re.match(r'^page\s+\d+(\s+of\s+\d+)?$', text, re.IGNORECASE) or \
+                           len(text) < 30:
                             continue
-
-                        if bottom < top_margin or top > bottom_margin:
-                            if re.match(r'^\d+$', text) or \
-                               re.match(r'^page\s+\d+(\s+of\s+\d+)?$', text, re.IGNORECASE) or \
-                               len(text) < 30:
-                                continue
-
-                        if is_heading(text):
-                            current_heading = text
-
-                        extracted_blocks.append({
-                            "text": text,
-                            "page": page_num,
-                            "bbox": [bbox[0], top, bbox[2], bottom],
-                            "heading": current_heading
-                        })
+                            
+                    if is_heading(text):
+                        current_heading = text
+                        
+                    extracted_blocks.append({
+                        "text": text,
+                        "page": page_num,
+                        "bbox": [line_obj.get("x0", 0), top, line_obj.get("x1", width), bottom],
+                        "heading": current_heading
+                    })
             
            
-            # PyMuPDF does not provide a direct high-level extract_tables API in the same way,
-            # so we preserve only text blocks for now.
-            # If table extraction is required, add a custom layout parser or use a dedicated tool.
+            tables = page.extract_tables()
+            if tables:
+                for table in tables:
+                    table_str = format_table(table)
+                    if table_str.strip():
+                        extracted_blocks.append({
+                            "text": table_str,
+                            "page": page_num,
+                            "bbox": [0, 0, width, height],
+                            "heading": current_heading
+                        })
                         
     return extracted_blocks
