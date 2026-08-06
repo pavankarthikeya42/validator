@@ -2,7 +2,7 @@ import pandas as pd
 from typing import Dict, Optional
 
 class ExcelValidator:
-    def __init__(self, excel_path: str = r"C:\Users\karthikeya\Downloads\medicines-output-medicines-report_en.xlsx"):
+    def __init__(self, excel_path: str = r"C:\Users\Satvika\Downloads\medicines-output-medicines-report_en (1).xlsx"):
         self.excel_path = excel_path
         self.df = None
         

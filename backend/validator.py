@@ -11,15 +11,8 @@ def validate_payload(dom_data: dict, pdf_bytes: bytes) -> dict:
     start_time = time.time()
     
     requested_general_fields = [
-        # Clinical Review fields
-        "Generic Name", "Review Type", "Priority / Standard", "Application #",
-        "Division / Office", "Therapeutic Areas", "Dosage Form", "Dosing Regimen",
-        "Pharmacologic Class", "Approval Date", "Submit Date", "Received Date",
-        "Review Completion", "Review Name",
-        # EPAR fields
-        "Product Name", "Marketing Authorisation Holder", "Date Of First Authorisation",
-        "Date Of Revision", "Variations", "Initial Documents", "Outcome", "Source",
-        "Initial Approval", "Approval Type", "Revised Date"
+        "Generic Name", "Brand / Program Name", "Sponsor", "Application #",
+        "Therapeutic Area", "REMS Approved", "Last Updated"
     ]
 
     # 1. Parse/Flatten DOM Data
@@ -40,16 +33,7 @@ def validate_payload(dom_data: dict, pdf_bytes: bytes) -> dict:
     sec_partial_count = 0
     sec_failed_count = 0
     
-    # 3a. Validate Metadata against Excel
-    try:
-        from excel_validator import ExcelValidator
-        excel_val = ExcelValidator()
-        excel_results = excel_val.validate_metadata(flat_dom)
-    except Exception as e:
-        import logging
-        logging.getLogger("validator_backend").error(f"Excel validation failed: {e}")
-        excel_results = {"error": str(e)}
-        
+    # 3a. Validate Metadata against PDF (bypassing Excel)
     flat_dom_lower = {k.lower(): k for k in flat_dom.keys()}
     requested_general_fields_lower = [f.lower() for f in requested_general_fields]
     
@@ -57,28 +41,8 @@ def validate_payload(dom_data: dict, pdf_bytes: bytes) -> dict:
     present_metadata_fields = [f for f in requested_general_fields if f.lower() in flat_dom_lower]
     
     for section_name in present_metadata_fields:
-        if "error" in excel_results:
-            report = {
-                "section": section_name,
-                "status": "FAIL",
-                "similarity": 0.0,
-                "matched_text": [],
-                "missing_text": [f"Excel Error: {excel_results['error']}"],
-                "pdf_pages": [],
-                "skipped": False
-            }
-        elif section_name in excel_results:
-            report = excel_results[section_name]
-        else:
-            report = {
-                "section": section_name,
-                "status": "PASS",
-                "similarity": 100.0,
-                "matched_text": [],
-                "missing_text": [],
-                "pdf_pages": [],
-                "skipped": True
-            }
+        ui_value = flat_dom.get(section_name, "")
+        report = match_section(section_name, ui_value, pdf_blocks)
             
         section_reports.append(report)
         status = report.get("status", "NULL")
@@ -113,13 +77,13 @@ def validate_payload(dom_data: dict, pdf_bytes: bytes) -> dict:
     meta_validated = [r for r in section_reports[:len(present_metadata_fields)] if not r.get("skipped", False) and r.get("status") != "NULL" and r.get("similarity") is not None]
     meta_accuracy = (
         sum(r["similarity"] for r in meta_validated) / len(meta_validated)
-        if len(meta_validated) > 0 else 100.0
+        if len(meta_validated) > 0 else 95.0
     )
     
     sec_validated = [r for r in dynamic_reports if not r.get("skipped", False) and r.get("status") != "NULL" and r.get("similarity") is not None]
     sec_accuracy = (
         sum(r["similarity"] for r in sec_validated) / len(sec_validated)
-        if len(sec_validated) > 0 else 100.0
+        if len(sec_validated) > 0 else 95.0
     )
 
     processing_time = time.time() - start_time
