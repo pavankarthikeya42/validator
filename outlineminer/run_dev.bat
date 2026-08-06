@@ -1,0 +1,3 @@
+@echo off
+echo Starting OutlineMiner in Development Mode (Auto-Restart enabled)...
+watchmedo auto-restart --directory=./ --pattern="*.py" --recursive -- python main.py
