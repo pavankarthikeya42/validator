@@ -407,22 +407,25 @@ def generate_toc_from_headings(doc: fitz.Document) -> List[str]:
     """
     extracted_items = []
     
+    # Pass 1: Find the global left margin of the document (rounded to nearest 10)
+    x0_coords = []
     for page_num in range(min(30, len(doc))):
         page = doc[page_num]
-        page_dict = page.get_text("dict")
-        
-        # Calculate most common font size on this page to filter out bold body text/table data
-        sizes = []
-        for block in page_dict.get("blocks", []):
+        for block in page.get_text("dict").get("blocks", []):
             if "lines" in block:
                 for line in block["lines"]:
                     for span in line["spans"]:
-                        sizes.append(round(span["size"], 1))
+                        if span["text"].strip():
+                            x0_coords.append(round(span["bbox"][0], -1))
+                            
+    global_margin = 70
+    if x0_coords:
+        global_margin = Counter(x0_coords).most_common(1)[0][0]
         
-        if not sizes:
-            continue
-            
-        most_common_size = Counter(sizes).most_common(1)[0][0]
+    # Pass 2: Extract headings
+    for page_num in range(min(30, len(doc))):
+        page = doc[page_num]
+        page_dict = page.get_text("dict")
         
         for block in page_dict.get("blocks", []):
             if "lines" not in block:
@@ -435,13 +438,14 @@ def generate_toc_from_headings(doc: fitz.Document) -> List[str]:
                         continue
                         
                     is_bold = "bold" in span["font"].lower() or "black" in span["font"].lower()
-                    is_large = span["size"] > (most_common_size + 0.5)
                     
                     # Check if it looks like a numbered heading (e.g. "1. Introduction")
                     is_numbered = bool(re.match(r'^(\d+(\.\d+)*\.|\d+(\.\d+)+|[IVX]+\.)\s+[A-Z].{2,100}$', text))
                     
-                    # Must be explicitly numbered, OR (bold AND larger than body text)
-                    is_heading = is_numbered or (is_bold and is_large)
+                    # It's a heading if it's explicitly numbered, OR (bold AND near the left margin)
+                    # This prevents extracting bold table headers from middle columns
+                    is_near_margin = span["bbox"][0] <= (global_margin + 50)
+                    is_heading = is_numbered or (is_bold and is_near_margin)
                     
                     if is_heading and 3 < len(text) < 100 and not text.isdigit():
                         text_without_section = re.sub(r'^(\d+(\.\d+)*\.?|[IVX]+\.)\s*', '', text).strip()
