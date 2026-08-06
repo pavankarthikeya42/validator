@@ -5,12 +5,10 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 async function extractDOM() {
   const uiData = {};
   
-  // The specific fields to extract from General Information
+  // The specific fields to extract from General Information (REMS)
   const requestedGeneralFields = [
-    "Generic Name", "Review Type", "Priority / Standard", "Application #",
-    "Division / Office", "Therapeutic Areas", "Dosage Form", "Dosing Regimen",
-    "Pharmacologic Class", "Approval Date", "Submit Date", "Received Date",
-    "Review Completion", "Review Name"
+    "Generic Name", "Brand / Program Name", "Sponsor", "Application #",
+    "Therapeutic Area", "REMS Approved", "Last Updated"
   ];
 
   // Initialize all requested fields to empty string
@@ -57,18 +55,26 @@ async function extractDOM() {
     });
   }
   
-  // 2. Extracted Sections (Dynamic for both Clinical and EPAR)
+  // 2. Extracted Sections (Dynamic for REMS)
   const sectionRows = document.querySelectorAll('.cmp-sec-row');
   sectionRows.forEach(secRow => {
     const sectionName = secRow.querySelector('.cmp-sec-text')?.textContent.trim();
     if (sectionName) {
+        // Look ahead for the content container in case it's not the immediate next sibling
         let nextEl = secRow.nextElementSibling;
-        if (nextEl && nextEl.classList.contains('cmp-sec-content')) {
-          const content = nextEl.querySelector('.cmp-content-inner')?.textContent.trim() || nextEl.textContent.trim();
-          if (content) {
-            uiData[sectionName] = content;
-          }
+        while (nextEl && !nextEl.classList.contains('cmp-sec-content') && !nextEl.classList.contains('cmp-sec-row')) {
+            nextEl = nextEl.nextElementSibling;
         }
+        
+        let content = "";
+        if (nextEl && nextEl.classList.contains('cmp-sec-content')) {
+          content = nextEl.querySelector('.cmp-content-inner')?.textContent.trim() || nextEl.textContent.trim();
+        } else {
+          // Fallback: sometimes content is nested inside the row itself in newer Karthera versions
+          content = secRow.textContent.replace(sectionName, '').trim();
+        }
+        
+        uiData[sectionName] = content ? content : "no data or null";
     }
   });
 
